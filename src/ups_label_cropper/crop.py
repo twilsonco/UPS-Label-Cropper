@@ -56,31 +56,31 @@ def process_label(input_path: str, output_path: str) -> None:
 
     src_page = doc[0]
     content_width, content_height = get_content_bounds(src_page)
-    page_width = src_page.rect.width
-    page_height = src_page.rect.height
 
-    rotate = 0
     width, height = content_width, content_height
-    if is_landscape(content_width, content_height):
-        rotate = 270
+    rotate = is_landscape(content_width, content_height)
+    if rotate:
         width, height = content_height, content_width
 
     scale_factor = calculate_scale_factor(width, height)
     final_width = width * scale_factor
     final_height = height * scale_factor
 
-    dest_rect = fitz.Rect(0, 0, TARGET_WIDTH_PT, TARGET_HEIGHT_PT)
-    clip_rect = fitz.Rect(0, 0, final_width, final_height)
+    offset_x = (TARGET_WIDTH_PT - final_width) / 2
+    offset_y = (TARGET_HEIGHT_PT - final_height) / 2
 
     out_doc = fitz.open()
     out_page = out_doc.new_page(width=TARGET_WIDTH_PT, height=TARGET_HEIGHT_PT)
 
-    out_page.show_pdf_page(
-        dest_rect,
-        doc,
-        0,
-        clip=clip_rect,
-        rotate=rotate,
+    if rotate:
+        matrix = fitz.Matrix(0, scale_factor, -scale_factor, 0, 0, content_width * scale_factor)
+    else:
+        matrix = fitz.Matrix(scale_factor, 0, 0, scale_factor, offset_x, offset_y)
+
+    pix = src_page.get_pixmap(matrix=matrix, alpha=True)
+    out_page.insert_image(
+        fitz.Rect(offset_x, offset_y, offset_x + final_width, offset_y + final_height),
+        pixmap=pix,
     )
 
     out_doc.save(str(output_path))
