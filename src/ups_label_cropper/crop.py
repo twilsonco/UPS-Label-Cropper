@@ -13,6 +13,29 @@ def get_page_info(page):
     return width, height
 
 
+def get_content_bounds(page):
+    images = page.get_images(full=True)
+    if images:
+        for img in images:
+            img_width, img_height = img[2], img[3]
+            return img_width, img_height
+    drawings = page.get_drawings()
+    if drawings:
+        min_x, min_y, max_x, max_y = float('inf'), float('inf'), 0, 0
+        for d in drawings:
+            rect = d.get('rect')
+            if rect:
+                min_x = min(min_x, rect.x0)
+                min_y = min(min_y, rect.y0)
+                max_x = max(max_x, rect.x1)
+                max_y = max(max_y, rect.y1)
+        if min_x != float('inf'):
+            return max_x - min_x, max_y - min_y
+    width = page.rect.width
+    height = page.rect.height
+    return width, height
+
+
 def is_landscape(width, height):
     return width > height
 
@@ -32,12 +55,15 @@ def process_label(input_path: str, output_path: str) -> None:
         raise ValueError("PDF has no pages")
 
     src_page = doc[0]
-    width, height = get_page_info(src_page)
+    content_width, content_height = get_content_bounds(src_page)
+    page_width = src_page.rect.width
+    page_height = src_page.rect.height
 
     rotate = 0
-    if is_landscape(width, height):
+    width, height = content_width, content_height
+    if is_landscape(content_width, content_height):
         rotate = 270
-        width, height = height, width
+        width, height = content_height, content_width
 
     scale_factor = calculate_scale_factor(width, height)
     final_width = width * scale_factor
