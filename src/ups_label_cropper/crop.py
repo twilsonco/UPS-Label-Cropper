@@ -96,10 +96,14 @@ def process_label(input_path: str, output_path: str) -> None:
     out_page = out_doc.new_page(width=TARGET_WIDTH_PT, height=TARGET_HEIGHT_PT)
 
     if rotate:
-        # Landscape: capture only the content region at high DPI
+        # Landscape: capture content region at higher DPI for quality
+        # Source content is typically ~96 DPI, so capture above that to preserve detail
+        CAPTURE_DPI = 300   
+        capture_scale = CAPTURE_DPI / 72.0
+
         clip_rect = fitz.Rect(content_bbox)
         src_pix = src_page.get_pixmap(
-            matrix=fitz.Matrix(1, 1),
+            matrix=fitz.Matrix(capture_scale, capture_scale),
             clip=clip_rect,
             alpha=True
         )
@@ -113,6 +117,7 @@ def process_label(input_path: str, output_path: str) -> None:
         rot_content_h = content_width
 
         scale_factor = min(effective_w / rot_content_w, effective_h / rot_content_h)
+        scale_factor *= 1.12
 
         # Final dimensions after scaling
         final_rot_w = rot_content_w * scale_factor
@@ -123,24 +128,29 @@ def process_label(input_path: str, output_path: str) -> None:
         offset_y = (TARGET_HEIGHT_PT - final_rot_h) / 2
 
         out_page.insert_image(
-            fitz.Rect(offset_x, offset_y, offset_x + final_rot_w, offset_y + final_rot_h),
+            fitz.Rect(offset_x, offset_y-65, offset_x + final_rot_w, offset_y + final_rot_h),
             pixmap=src_pix,
             rotate=90,
         )
     else:
-        # Portrait: capture content region and scale with ~1mm margin
+        # Portrait: capture content region at higher DPI for quality
+        CAPTURE_DPI = 150
+        capture_scale = CAPTURE_DPI / 72.0
+
+        clip_rect = fitz.Rect(content_bbox)
+        src_pix = src_page.get_pixmap(
+            matrix=fitz.Matrix(capture_scale, capture_scale),
+            clip=clip_rect,
+            alpha=True
+        )
+
+        # Scale captured content to fit with ~1mm margin
         MARGIN_PT = 3.0  # ~1mm margin on all sides
         effective_w = TARGET_WIDTH_PT - 2 * MARGIN_PT
         effective_h = TARGET_HEIGHT_PT - 2 * MARGIN_PT
 
         scale_factor = min(effective_w / content_width, effective_h / content_height)
-
-        clip_rect = fitz.Rect(content_bbox)
-        src_pix = src_page.get_pixmap(
-            matrix=fitz.Matrix(scale_factor, scale_factor),
-            clip=clip_rect,
-            alpha=True
-        )
+        scale_factor *= 1.05
 
         final_width = content_width * scale_factor
         final_height = content_height * scale_factor
