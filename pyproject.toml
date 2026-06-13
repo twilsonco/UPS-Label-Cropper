@@ -5,10 +5,16 @@ description = "UPS Label Cropper - Auto-rotates and scales UPS labels for therma
 requires-python = ">=3.10"
 dependencies = [
     "PyMuPDF>=1.23.0",
+    "watchdog>=3.0.0",
+    "pystray>=0.19.0",
+    "Pillow>=10.0.0",
+    "pywin32; platform_system == 'Windows'",
+    "platformdirs>=4.0.0",
 ]
 
 [project.scripts]
 ups-label-cropper = "ups_label_cropper.crop:main"
+ups-label-cropper-watch = "ups_label_cropper.__main__:run_watch_mode"
 
 [build-system]
 requires = ["hatchling"]
