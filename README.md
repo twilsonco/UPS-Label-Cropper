@@ -227,9 +227,7 @@ The VBScript file `ups-watch.vbs` in the project folder launches the watcher com
 ```powershell
 $vbsPath = "C:\path\to\UPS-Label-Cropper\ups-watch.vbs"
 
-Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" `
-  -Name "UPSLabelCropper" `
-  -Value "`"$vbsPath`""
+Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "UPSLabelCropper" -Value "$vbsPath"
 ```
 
 On first run, Windows may show a security dialog — click "Allow" and optionally deselect "Ask me every time".
