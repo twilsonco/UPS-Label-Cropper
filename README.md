@@ -90,31 +90,6 @@ You'll see some downloading progress — this installs all required libraries au
 
 ---
 
-### What You'll See on First Run
-
-When you first start watch mode (see below), a few things will happen:
-
-1. **A default config file is created** at:
-   ```
-   C:\Users\YourName\AppData\Roaming\UPS-Label-Cropper\config.json
-   ```
-
-2. **A folder is created** at:
-   ```
-   C:\Users\YourName\UPSLabels
-   ```
-   This is where you'll put your UPS label PDFs to be processed.
-
-3. **You'll see a startup summary** in the command prompt showing:
-   - Where your config file is located
-   - Where logs are saved
-   - Which folder is being watched
-   - Which printer will be used (and if it's found)
-
-4. **A system tray icon appears** — look for a small UPS Label Cropper icon in the bottom-right corner of your screen (near the clock). Right-click it to access the menu.
-
----
-
 ## Usage
 
 ### CLI — Single File Mode
@@ -124,9 +99,6 @@ Process one PDF and save the cropped output:
 ```bash
 # Using uv run (recommended during dev)
 uv run python -m ups_label_cropper.crop input.pdf output.pdf
-
-# Or after installation via entry point:
-ups-label-cropper input.pdf output.pdf
 ```
 
 ### Watch Mode — Auto-Process Directory
@@ -135,9 +107,6 @@ Run in background with a system tray icon. Monitors a configured directory for n
 
 ```bash
 uv run python -m ups_label_cropper.__main__ --watch
-
-# Or via installed entry point:
-ups-label-cropper-watch
 ```
 
 A system tray icon will appear. Right-click it to see status, pause/resume watching, open the config folder, or exit.
@@ -191,6 +160,29 @@ A default config is created automatically on first run if one doesn't exist.
 ```
 
 To edit the config, either open the JSON file directly or right-click the system tray icon and choose **Open Config Folder**.
+
+### What You'll See on First Run
+
+When you first start watch mode (see above), a few things will happen:
+
+1. **A default config file is created** at:
+   ```
+   C:\Users\YourName\AppData\Roaming\UPS-Label-Cropper\config.json
+   ```
+
+2. **A folder is created** at:
+   ```
+   C:\Users\YourName\UPSLabels
+   ```
+   This is where you'll put your UPS label PDFs to be processed.
+
+3. **You'll see a startup summary** in the command prompt showing:
+   - Where your config file is located
+   - Where logs are saved
+   - Which folder is being watched
+   - Which printer will be used (and if it's found)
+
+4. **A system tray icon appears** — look for a small UPS Label Cropper icon in the bottom-right corner of your screen (near the clock). Right-click it to access the menu.
 
 ---
 
