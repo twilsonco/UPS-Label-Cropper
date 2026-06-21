@@ -28,15 +28,90 @@ These dimensions match standard thermal label printer sizes (4" × 6" shipping l
 
 ### Prerequisites
 
-- Python **3.10+**
+- Python **3.10+** — [Download from python.org](https://www.python.org/downloads/)
 - [uv](https://github.com/astral-sh/uv) package manager
-- On Windows: a PDF-capable printer installed and set as default (or specify by name in config)
+- On Windows: a PDF-capable printer installed (or specify by name in config)
 
-```bash
-git clone <repo-url>
-cd UPS-Label-Cropper
+---
+
+### For Windows Users — Step-by-Step Setup
+
+#### Step 1: Install Python
+
+1. Go to [python.org/downloads](https://www.python.org/downloads/)
+2. Click the **Download Python** button (you'll see something like "Python 3.12.x")
+3. Run the downloaded `.exe` file
+4. **Important:** On the first screen of the installer, check the box that says **"Add Python to PATH"**
+   - This makes it possible to run Python from any command prompt
+5. Click **Install Now** (or Customize if you want to change the install location)
+6. Wait for installation to complete, then click **Close**
+
+#### Step 2: Verify Python Installation
+
+1. Press `Win + R`, type `cmd`, press Enter
+2. In the black window that appears, type:
+   ```
+   python --version
+   ```
+3. You should see something like `Python 3.12.x` — if you get an error, restart your computer and try again
+
+#### Step 3: Install uv
+
+1. In the same command prompt window, copy-paste this and press Enter:
+   ```
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+2. Wait a few seconds — you'll see some progress dots
+3. **Close that command prompt window** and open a new one (this refreshes your PATH with uv)
+
+#### Step 4: Get the Software
+
+1. Go to the repository on GitHub and click the green **Code** button, then **Download ZIP**
+2. Or if you have Git installed, run:
+   ```
+   git clone <repo-url>
+   ```
+3. Extract the ZIP file to somewhere convenient (like your Desktop or Documents folder)
+4. Open a new command prompt (`Win + R`, type `cmd`, Enter)
+5. Navigate to the project folder by typing:
+   ```
+   cd C:\Users\YourName\Path\To\UPS-Label-Cropper
+   ```
+   (Tip: you can drag the folder from Explorer into the command prompt window to auto-fill the path)
+
+#### Step 5: Install Dependencies
+
+In the command prompt, run:
+```
 uv sync
 ```
+
+You'll see some downloading progress — this installs all required libraries automatically.
+
+---
+
+### What You'll See on First Run
+
+When you first start watch mode (see below), a few things will happen:
+
+1. **A default config file is created** at:
+   ```
+   C:\Users\YourName\AppData\Roaming\UPS-Label-Cropper\config.json
+   ```
+
+2. **A folder is created** at:
+   ```
+   C:\Users\YourName\UPSLabels
+   ```
+   This is where you'll put your UPS label PDFs to be processed.
+
+3. **You'll see a startup summary** in the command prompt showing:
+   - Where your config file is located
+   - Where logs are saved
+   - Which folder is being watched
+   - Which printer will be used (and if it's found)
+
+4. **A system tray icon appears** — look for a small UPS Label Cropper icon in the bottom-right corner of your screen (near the clock). Right-click it to access the menu.
 
 ---
 
