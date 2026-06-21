@@ -222,36 +222,26 @@ To start watch mode automatically when you log into Windows:
 
 ### Option 1: Registry (quick)
 
-The tricky part with Registry startup is that it runs from your user folder, not the project folder. The solution is to use a small batch file wrapper.
+The batch file `ups-watch.bat` in the project folder handles the path issues automatically. In an admin PowerShell prompt, run once:
 
-1. Create a file called `ups-watch.bat` in your project folder (`C:\Users\YourName\Tools\UPS-Label-Cropper\`):
-   ```bat
-   @echo off
-   cd /d "%~dp0"
-   ".venv\Scripts\pythonw.exe" -m ups_label_cropper.__main__ --watch
-   ```
+```powershell
+$batPath = "C:\path\to\UPS-Label-Cropper\ups-watch.bat"
 
-2. In an admin PowerShell prompt, run once:
-   ```powershell
-   $batPath = "C:\path\to\UPS-Label-Cropper\ups-watch.bat"
-
-   Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" `
-     -Name "UPSLabelCropper" `
-     -Value "`"$batPath`""
-   ```
+Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" `
+  -Name "UPSLabelCropper" `
+  -Value "`"$batPath`""
+```
 
 To remove: `Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "UPSLabelCropper"`
 
 ### Option 2: Task Scheduler (recommended for delayed start)
 
-Task Scheduler lets you set the working directory directly, which avoids the batch file workaround:
+Task Scheduler handles systems that boot before Python is ready:
 
 1. Open **Task Scheduler** → Create Basic Task
 2. Name it `UPS Label Cropper`, trigger on **Log on**
 3. Action: Start a program
-   - Program: `C:\path\to\pythonw.exe`
-   - Arguments: `-m ups_label_cropper.__main__ --watch`
-   - **Start in:** `C:\path\to\UPS-Label-Cropper` (important!)
+   - Program: `C:\path\to\UPS-Label-Cropper\ups-watch.bat`
 4. Finish — optionally check **Open Properties** and set **Run whether user is logged on or not**
 
 ---
