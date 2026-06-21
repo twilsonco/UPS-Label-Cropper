@@ -13,7 +13,8 @@ def run_watch_mode():
     from ups_label_cropper.config import Config
 
     config = Config.load()
-    log_path = Config.default_config_path().parent / "cropper.log"
+    config_path = Config.default_config_path()
+    log_path = config_path.parent / "cropper.log"
 
     logging.basicConfig(
         level=logging.INFO,
@@ -22,15 +23,45 @@ def run_watch_mode():
     )
 
     from ups_label_cropper.tray import run_tray
+    from ups_label_cropper.printer import get_system_default_printer, _validate_printer
+
+    # Determine printer and validate
+    if config.printer_name:
+        printer_display = config.printer_name
+        printer_valid = _validate_printer(config.printer_name)
+    else:
+        default = get_system_default_printer()
+        printer_display = f"system default ({default or 'none set'})"
+        printer_valid = default is not None
+
+    # Print startup banner
+    print("\n" + "=" * 60)
+    print("  UPS Label Cropper - Watch Mode")
+    print("=" * 60)
+    print(f"\n  Configuration:")
+    print(f"    Config file:     {config_path}")
+    print(f"    Log file:        {log_path}")
+    print(f"\n  Folders:")
+    print(f"    Watching:        {config.watched_directory}")
+    processed_dir = config.get_processed_dir()
+    print(f"    Archive (after successful print):")
+    print(f"                 -> {processed_dir}/")
+    print(f"\n  Printer:")
+    if printer_valid:
+        print(f"    Using:           {printer_display} [OK]")
+    else:
+        print(f"    Using:           {printer_display} [! NOT FOUND]")
+    print("\n" + "-" * 60)
+    print("  System tray icon is running in the background.")
+    print("  Right-click it to pause/resume or exit.")
+    print("-" * 60 + "\n")
 
     logger.info(f"Starting UPS Label Cropper in watch mode...")
-    logger.info(f"  Watch directory: {config.watched_directory}")
     if config.printer_name:
-        logger.info(f"  Printer: {config.printer_name}")
+        logger.info(f"  Printer configured: {config.printer_name} (valid: {printer_valid})")
     else:
-        from ups_label_cropper.printer import get_system_default_printer
         default = get_system_default_printer()
-        logger.info(f"  Printer: {default or 'system default'}")
+        logger.info(f"  Using system default printer: {default or 'none'}")
 
     run_tray(config=config)
 

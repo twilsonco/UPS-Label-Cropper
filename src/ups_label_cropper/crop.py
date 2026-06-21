@@ -1,7 +1,10 @@
+import logging
 import sys
 from pathlib import Path
 
 import fitz
+
+logger = logging.getLogger(__name__)
 
 TARGET_WIDTH_PT = 283.5
 TARGET_HEIGHT_PT = 425.2
@@ -80,6 +83,8 @@ def process_label(input_path: str, output_path: str) -> None:
     input_path = Path(input_path)
     output_path = Path(output_path)
 
+    logger.info(f"Processing label: {input_path.name} -> {output_path}")
+
     doc = fitz.open(str(input_path))
     if len(doc) == 0:
         raise ValueError("PDF has no pages")
@@ -91,6 +96,8 @@ def process_label(input_path: str, output_path: str) -> None:
     content_bbox = get_content_bbox(src_page)
 
     rotate = is_landscape(content_width, content_height)
+    orientation = "landscape (will rotate 90° CCW)" if rotate else "portrait"
+    logger.info(f"  Content: {content_width:.1f}pt x {content_height:.1f}pt -> {orientation}")
 
     out_doc = fitz.open()
     out_page = out_doc.new_page(width=TARGET_WIDTH_PT, height=TARGET_HEIGHT_PT)
@@ -98,7 +105,7 @@ def process_label(input_path: str, output_path: str) -> None:
     if rotate:
         # Landscape: capture content region at higher DPI for quality
         # Source content is typically ~96 DPI, so capture above that to preserve detail
-        CAPTURE_DPI = 300   
+        CAPTURE_DPI = 300
         capture_scale = CAPTURE_DPI / 72.0
 
         clip_rect = fitz.Rect(content_bbox)
@@ -163,9 +170,13 @@ def process_label(input_path: str, output_path: str) -> None:
             pixmap=src_pix,
         )
 
+    # Log the capture details (CAPTURE_DPI is scoped within if/else)
+    dpi_used = 300 if rotate else 150
+    logger.info(f"  Captured at {dpi_used} DPI, scaled to fit with ~1mm margin")
     out_doc.save(str(output_path))
     doc.close()
     out_doc.close()
+    logger.info(f"  Saved output: {output_path}")
 
 
 def main():

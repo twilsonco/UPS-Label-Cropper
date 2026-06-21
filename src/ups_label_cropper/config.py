@@ -24,6 +24,10 @@ class Config:
         if not path.exists():
             config = cls._create_default()
             config.save(path)
+            # Print config creation info for first-run visibility
+            print(f"\n[UPS Label Cropper] First run detected - created default config:")
+            print(f"  Config file: {path}")
+            print(f"  Watch folder: {config.watched_directory}")
             return config
 
         with open(path) as f:

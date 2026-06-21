@@ -60,15 +60,16 @@ class LabelFileHandler(FileSystemEventHandler):
         try:
             time.sleep(self._debounce_seconds)
             if not path.exists():
+                logger.warning(f"File disappeared before processing: {path.name}")
                 return
             # Wait for file to be unlocked by originating process (e.g., browser download)
             if not _wait_for_file_unlock(path):
                 logger.warning(f"File is locked, skipping: {path.name}")
                 return
-            logger.info(f"Processing new PDF: {path.name}")
+            logger.info(f"[WATCHER] New PDF detected: {path.name}")
             self.pipeline.run(path)
         except Exception as e:
-            logger.error(f"Failed to process {path}: {e}")
+            logger.error(f"[WATCHER] Failed to process {path}: {e}")
         finally:
             self._processing.discard(key)
 
@@ -81,32 +82,37 @@ class LabelPipeline:
     def run(self, input_pdf: Path) -> bool:
         input_pdf = Path(input_pdf).resolve()
         if not input_pdf.exists():
-            logger.warning(f"Input file no longer exists: {input_pdf}")
+            logger.warning(f"[PIPELINE] Input file no longer exists: {input_pdf}")
             return False
 
         try:
             fitz.open(str(input_pdf)).close()
         except Exception as e:
-            logger.error(f"File is not a valid PDF: {input_pdf}: {e}")
+            logger.error(f"[PIPELINE] File is not a valid PDF: {input_pdf}: {e}")
             return False
 
         temp_output = Path(tempfile.gettempdir()) / f"ups_cropped_{int(time.time()*1000)}.pdf"
         self._temp_files.append(temp_output)
 
         try:
+            logger.info(f"[PIPELINE] Cropping label...")
             process_label(str(input_pdf), str(temp_output))
         except Exception as e:
-            logger.error(f"Crop failed for {input_pdf}: {e}")
+            logger.error(f"[PIPELINE] Crop failed for {input_pdf}: {e}")
             return False
 
+        printer_desc = self.config.printer_name or "system default"
         try:
+            logger.info(f"[PIPELINE] Sending to printer: {printer_desc}")
             print_pdf(temp_output, printer_name=self.config.printer_name)
+            logger.info(f"[PIPELINE] Print job sent successfully")
         except Exception as e:
-            logger.error(f"Print failed: {e}")
+            logger.error(f"[PIPELINE] Print failed: {e}")
             return False
 
         self._cleanup_temp()
         self._archive_source(input_pdf)
+        logger.info(f"[PIPELINE] Processing complete for {input_pdf.name}")
         return True
 
     def _archive_source(self, source: Path):
