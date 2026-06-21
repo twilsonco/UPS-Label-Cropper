@@ -5,23 +5,32 @@ import sys
 from ups_label_cropper.crop import main as crop_main
 
 
+logger = logging.getLogger(__name__)
+
+
 def run_watch_mode():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-    )
-    from ups_label_cropper.tray import run_tray
+    # Import Config here to avoid circular imports and ensure we can resolve log path
     from ups_label_cropper.config import Config
 
     config = Config.load()
-    print(f"Starting UPS Label Cropper in watch mode...")
-    print(f"  Watch directory: {config.watched_directory}")
+    log_path = Config.default_config_path().parent / "cropper.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        filename=str(log_path),
+    )
+
+    from ups_label_cropper.tray import run_tray
+
+    logger.info(f"Starting UPS Label Cropper in watch mode...")
+    logger.info(f"  Watch directory: {config.watched_directory}")
     if config.printer_name:
-        print(f"  Printer: {config.printer_name}")
+        logger.info(f"  Printer: {config.printer_name}")
     else:
         from ups_label_cropper.printer import get_system_default_printer
         default = get_system_default_printer()
-        print(f"  Printer: {default or 'system default'}")
+        logger.info(f"  Printer: {default or 'system default'}")
 
     run_tray(config=config)
 

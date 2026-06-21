@@ -15,6 +15,26 @@ from ups_label_cropper.printer import print_pdf
 logger = logging.getLogger(__name__)
 
 
+def _wait_for_file_unlock(path: Path, timeout: float = 10.0) -> bool:
+    """Wait for a file to be released by the process that created it.
+
+    On Windows, when a file is created (e.g., browser download), it may hold
+    an exclusive write lock until the transfer completes. This function polls
+    until the file is accessible or the timeout expires.
+
+    Returns True if file is accessible, False if timeout occurred.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            # Attempt to open exclusively to check for locks
+            path.rename(path)
+            return True
+        except OSError:
+            time.sleep(0.5)
+    return False
+
+
 class LabelFileHandler(FileSystemEventHandler):
     def __init__(self, config: Config, pipeline: "LabelPipeline"):
         super().__init__()
@@ -40,6 +60,10 @@ class LabelFileHandler(FileSystemEventHandler):
         try:
             time.sleep(self._debounce_seconds)
             if not path.exists():
+                return
+            # Wait for file to be unlocked by originating process (e.g., browser download)
+            if not _wait_for_file_unlock(path):
+                logger.warning(f"File is locked, skipping: {path.name}")
                 return
             logger.info(f"Processing new PDF: {path.name}")
             self.pipeline.run(path)

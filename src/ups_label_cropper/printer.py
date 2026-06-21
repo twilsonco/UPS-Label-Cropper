@@ -1,9 +1,22 @@
+import subprocess
 import sys
 from pathlib import Path
 
 if sys.platform == "win32":
-    import win32api
     import win32print
+
+
+def _get_sumatra_path() -> Path:
+    """Resolve the path to the bundled SumatraPDF executable."""
+    # __file__ is the path to this printer.py file
+    current_dir = Path(__file__).resolve().parent
+    sumatra_exe = current_dir / "bin" / "SumatraPDF.exe"
+    if not sumatra_exe.exists():
+        raise FileNotFoundError(
+            f"Bundled SumatraPDF not found at {sumatra_exe}. "
+            "Please ensure SumatraPDF.exe is placed in the bin/ directory."
+        )
+    return sumatra_exe
 
 
 def print_pdf(pdf_path: Path, printer_name: str | None = None) -> bool:
@@ -18,25 +31,27 @@ def print_pdf(pdf_path: Path, printer_name: str | None = None) -> bool:
 
 
 def _print_windows(pdf_path: Path, printer_name: str | None) -> bool:
-    if printer_name:
-        printer = _get_printer_handle(printer_name)
-        if printer:
-            result = win32api.ShellExecute(
-                0,
-                "printto",
-                str(pdf_path.resolve()),
-                f'"{printer}"',
-                ".",
-                0,
-            )
-        else:
-            raise ValueError(f"Printer not found: {printer_name}")
+    if printer_name is None:
+        printer_name = get_system_default_printer()
+        if printer_name is None:
+            raise OSError("No printer specified and no default printer found")
     else:
-        result = win32api.ShellExecute(0, "print", str(pdf_path.resolve()), None, ".", 0)
+        # Validate printer exists before attempting to print
+        if not _validate_printer(printer_name):
+            raise ValueError(f"Printer not found: {printer_name}")
 
-    if result <= 2:
-        raise RuntimeError(f"ShellExecute failed with code {result}")
-
+    # Use SumatraPDF for reliable silent printing (avoids ShellExecute issues
+    # with Acrobat/Edge leaving ghost processes and stealing focus)
+    sumatra_path = _get_sumatra_path()
+    subprocess.run(
+        [
+            str(sumatra_path),
+            "-print-to", printer_name,
+            "-silent",
+            str(pdf_path.resolve()),
+        ],
+        check=True,
+    )
     return True
 
 
@@ -49,6 +64,11 @@ def _get_printer_handle(printer_name: str):
         return None
     except Exception:
         return None
+
+
+def _validate_printer(printer_name: str) -> bool:
+    """Validate that a printer exists on the system."""
+    return _get_printer_handle(printer_name) is not None
 
 
 def get_system_default_printer() -> str | None:
