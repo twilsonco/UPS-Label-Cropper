@@ -222,15 +222,17 @@ To start watch mode automatically when you log into Windows:
 
 ### Option 1: Registry (quick)
 
-The batch file `ups-watch.bat` in the project folder handles the path issues automatically. In an admin PowerShell prompt, run once:
+The VBScript file `ups-watch.vbs` in the project folder launches the watcher completely hidden — no command prompt window appears at all. In an admin PowerShell prompt, run once:
 
 ```powershell
-$batPath = "C:\path\to\UPS-Label-Cropper\ups-watch.bat"
+$vbsPath = "C:\path\to\UPS-Label-Cropper\ups-watch.vbs"
 
 Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" `
   -Name "UPSLabelCropper" `
-  -Value "`"$batPath`""
+  -Value "`"$vbsPath`""
 ```
+
+On first run, Windows may show a security dialog — click "Allow" and optionally deselect "Ask me every time".
 
 To remove: `Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "UPSLabelCropper"`
 
@@ -241,7 +243,7 @@ Task Scheduler handles systems that boot before Python is ready:
 1. Open **Task Scheduler** → Create Basic Task
 2. Name it `UPS Label Cropper`, trigger on **Log on**
 3. Action: Start a program
-   - Program: `C:\path\to\UPS-Label-Cropper\ups-watch.bat`
+   - Program: `C:\path\to\UPS-Label-Cropper\ups-watch.vbs`
 4. Finish — optionally check **Open Properties** and set **Run whether user is logged on or not**
 
 ---
