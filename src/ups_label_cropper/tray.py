@@ -1,5 +1,9 @@
 import logging
+import subprocess
+import sys
+from dataclasses import asdict
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image, ImageDraw
 import pystray
@@ -9,6 +13,130 @@ from ups_label_cropper.watcher import LabelWatcher
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_log_path() -> Path:
+    """Get the path to the log file."""
+    from pathlib import Path
+    config_path = Config.default_config_path()
+    return config_path.parent / "cropper.log"
+
+
+def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
+    """Show a settings dialog using tkinter."""
+    try:
+        import tkinter as tk
+        from tkinter import ttk, filedialog, messagebox
+    except ImportError:
+        logger.error("tkinter not available for settings dialog")
+        return
+
+    root = tk.Tk()
+    root.title("UPS Label Cropper - Settings")
+    root.geometry("500x350")
+    root.resizable(False, False)
+
+    # Make it appear on top of the system tray icon
+    root.attributes("-topmost", True)
+
+    config = watcher.config.copy() if hasattr(watcher, 'config') else Config.load()
+    
+    # Store original values for comparison
+    original_config = asdict(config)
+    
+    # Create a frame with padding
+    main_frame = ttk.Frame(root, padding="20")
+    main_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Title
+    title_label = ttk.Label(main_frame, text="Settings", font=("Segoe UI", 14, "bold"))
+    title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
+
+    # Watched Directory
+    ttk.Label(main_frame, text="Watch Directory:").grid(row=1, column=0, sticky=tk.W, pady=8)
+    watched_var = tk.StringVar(value=config.watched_directory)
+    watched_entry = ttk.Entry(main_frame, textvariable=watched_var, width=40)
+    watched_entry.grid(row=1, column=1, pady=8)
+
+    def select_watch_directory():
+        directory = filedialog.askdirectory(
+            title="Select Watch Directory",
+            initialdir=watched_var.get() or str(Path.home())
+        )
+        if directory:
+            watched_var.set(directory)
+
+    ttk.Button(main_frame, text="Browse...", command=select_watch_directory).grid(row=1, column=2, pady=8, padx=(5, 0))
+
+    # Printer Name
+    ttk.Label(main_frame, text="Printer Name:").grid(row=2, column=0, sticky=tk.W, pady=8)
+    printer_var = tk.StringVar(value=config.printer_name or "")
+    printer_entry = ttk.Entry(main_frame, textvariable=printer_var, width=40)
+    printer_entry.grid(row=2, column=1, columnspan=2, sticky=tk.W+tk.E, pady=8)
+
+    # Processed Folder
+    ttk.Label(main_frame, text="Processed Folder:").grid(row=3, column=0, sticky=tk.W, pady=8)
+    processed_var = tk.StringVar(value=config.processed_folder)
+    processed_entry = ttk.Entry(main_frame, textvariable=processed_var, width=40)
+    processed_entry.grid(row=3, column=1, columnspan=2, sticky=tk.W+tk.E, pady=8)
+
+    # Poll Interval
+    ttk.Label(main_frame, text="Poll Interval (sec):").grid(row=4, column=0, sticky=tk.W, pady=8)
+    poll_var = tk.StringVar(value=str(config.poll_interval_seconds))
+    poll_entry = ttk.Entry(main_frame, textvariable=poll_var, width=10)
+    poll_entry.grid(row=4, column=1, sticky=tk.W, pady=8)
+
+    def validate_poll():
+        try:
+            val = float(poll_var.get())
+            return 0.1 <= val <= 60.0
+        except ValueError:
+            return False
+
+    # Buttons frame at bottom
+    buttons_frame = ttk.Frame(main_frame)
+    buttons_frame.grid(row=6, column=0, columnspan=3, pady=(20, 0))
+
+    def save_settings():
+        # Validate poll interval
+        try:
+            poll_val = float(poll_var.get())
+            if not (0.1 <= poll_val <= 60.0):
+                messagebox.showerror("Invalid Value", "Poll interval must be between 0.1 and 60 seconds.")
+                return
+        except ValueError:
+            messagebox.showerror("Invalid Value", "Poll interval must be a number.")
+            return
+
+        # Update config object
+        watcher.config.watched_directory = watched_var.get()
+        watcher.config.printer_name = printer_var.get() if printer_var.get() else None
+        watcher.config.processed_folder = processed_var.get()
+        watcher.config.poll_interval_seconds = poll_val
+
+        # Save to disk
+        try:
+            watcher.config.save()
+            logger.info("Settings saved successfully")
+            messagebox.showinfo("Success", "Settings saved successfully. Restart the application for all changes to take effect.")
+            root.destroy()
+        except Exception as e:
+            logger.error(f"Failed to save settings: {e}")
+            messagebox.showerror("Error", f"Failed to save settings: {e}")
+
+    def cancel():
+        root.destroy()
+
+    ttk.Button(buttons_frame, text="Save", command=save_settings).pack(side=tk.LEFT, padx=5)
+    ttk.Button(buttons_frame, text="Cancel", command=cancel).pack(side=tk.LEFT, padx=5)
+
+    # Center the window on screen
+    root.update_idletasks()
+    x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
+    y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
+    root.geometry(f"+{x}+{y}")
+
+    root.mainloop()
 
 
 def _create_icon_image() -> Image.Image:
@@ -40,14 +168,19 @@ def _build_menu(icon: pystray.Icon, watcher: LabelWatcher) -> pystray.Menu:
             icon.menu = _build_menu(icon, watcher)
             icon.update_title("UPS Label Cropper")
 
-    def on_open_config(icon, item):
-        import subprocess
-        config_path = Config.default_config_path()
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        if hasattr(__import__('sys'), 'platform') and __import__('sys').platform == "win32":
-            subprocess.run(["explorer", str(config_path.parent)])
-        else:
-            subprocess.run(["xdg-open", str(config_path.parent)])
+    def on_settings(icon, item):
+        _show_settings_dialog(icon, watcher)
+
+    def on_show_logs(icon, item):
+        log_path = _get_log_path()
+        try:
+            if sys.platform == "win32":
+                # Use notepad.exe which is available on all Windows versions
+                subprocess.run(["notepad.exe", str(log_path)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(log_path)])
+        except Exception as e:
+            logger.error(f"Failed to open log file: {e}")
 
     def on_exit(icon, item):
         icon.visible = False
@@ -62,7 +195,8 @@ def _build_menu(icon: pystray.Icon, watcher: LabelWatcher) -> pystray.Menu:
             "Pause" if getattr(watcher, "_running", True) else "Resume",
             on_pause_resume,
         ),
-        pystray.MenuItem("Open Config Folder", on_open_config),
+        pystray.MenuItem("Settings", on_settings),
+        pystray.MenuItem("Show Logs", on_show_logs),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Exit", on_exit),
     )

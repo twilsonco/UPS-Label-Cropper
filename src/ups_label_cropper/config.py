@@ -1,3 +1,4 @@
+import copy
 import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -11,6 +12,10 @@ class Config:
     printer_name: str | None = None
     processed_folder: str = "processed"
     poll_interval_seconds: float = 1.0
+
+    def copy(self) -> "Config":
+        """Return a shallow copy of the config."""
+        return copy.copy(self)
 
     @classmethod
     def default_config_path(cls) -> Path:
