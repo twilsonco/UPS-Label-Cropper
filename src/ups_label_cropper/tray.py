@@ -22,6 +22,29 @@ def _get_log_path() -> Path:
     return config_path.parent / "cropper.log"
 
 
+def _restart_watcher(watcher: LabelWatcher):
+    """Restart the watcher with potentially new configuration."""
+    try:
+        # Stop existing observer
+        if watcher.observer.is_alive():
+            watcher.stop()
+
+        # Recreate pipeline and event handler with updated config
+        from ups_label_cropper.watcher import LabelPipeline, LabelFileHandler
+        watcher.pipeline = LabelPipeline(watcher.config)
+        watcher.event_handler = LabelFileHandler(watcher.config, watcher.pipeline)
+
+        # Restart observer
+        watch_dir = Path(watcher.config.watched_directory)
+        if not watch_dir.exists():
+            watch_dir.mkdir(parents=True, exist_ok=True)
+        watcher.observer.schedule(watcher.event_handler, str(watch_dir), recursive=False)
+        watcher.observer.start()
+        logger.info(f"Watcher restarted with directory: {watch_dir}")
+    except Exception as e:
+        logger.error(f"Failed to restart watcher: {e}")
+
+
 def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
     """Show a settings dialog using tkinter."""
     try:
@@ -108,8 +131,14 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
             messagebox.showerror("Invalid Value", "Poll interval must be a number.")
             return
 
+        new_watched_dir = watched_var.get()
+        restart_watcher = (
+            new_watched_dir != watcher.config.watched_directory or
+            poll_val != watcher.config.poll_interval_seconds
+        )
+
         # Update config object
-        watcher.config.watched_directory = watched_var.get()
+        watcher.config.watched_directory = new_watched_dir
         watcher.config.printer_name = printer_var.get() if printer_var.get() else None
         watcher.config.processed_folder = processed_var.get()
         watcher.config.poll_interval_seconds = poll_val
@@ -118,7 +147,12 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
         try:
             watcher.config.save()
             logger.info("Settings saved successfully")
-            messagebox.showinfo("Success", "Settings saved successfully. Restart the application for all changes to take effect.")
+
+            # Restart watcher if directory or poll interval changed
+            if restart_watcher and hasattr(watcher, '_running') and watcher._running:
+                _restart_watcher(watcher)
+
+            messagebox.showinfo("Success", "Settings saved successfully.")
             root.destroy()
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
