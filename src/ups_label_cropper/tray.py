@@ -82,10 +82,13 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
     watched_entry.grid(row=1, column=1, pady=8)
 
     def select_watch_directory():
+        # Withdraw the root window to avoid focus issues with native file dialog on macOS
+        root.withdraw()
         directory = filedialog.askdirectory(
             title="Select Watch Directory",
             initialdir=watched_var.get() or str(Path.home())
         )
+        root.deiconify()
         if directory:
             watched_var.set(directory)
 
@@ -125,10 +128,14 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
         try:
             poll_val = float(poll_var.get())
             if not (0.1 <= poll_val <= 60.0):
+                root.withdraw()
                 messagebox.showerror("Invalid Value", "Poll interval must be between 0.1 and 60 seconds.")
+                root.deiconify()
                 return
         except ValueError:
+            root.withdraw()
             messagebox.showerror("Invalid Value", "Poll interval must be a number.")
+            root.deiconify()
             return
 
         new_watched_dir = watched_var.get()
@@ -152,11 +159,14 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
             if restart_watcher and hasattr(watcher, '_running') and watcher._running:
                 _restart_watcher(watcher)
 
+            root.withdraw()
             messagebox.showinfo("Success", "Settings saved successfully.")
             root.destroy()
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
+            root.withdraw()
             messagebox.showerror("Error", f"Failed to save settings: {e}")
+            root.deiconify()
 
     def cancel():
         root.destroy()
