@@ -12,6 +12,7 @@ class Config:
     printer_name: str | None = None
     processed_folder: str = "processed"
     poll_interval_seconds: float = 1.0
+    start_with_computer: bool = False
 
     def copy(self) -> "Config":
         """Return a shallow copy of the config."""
@@ -42,6 +43,7 @@ class Config:
             printer_name=data.get("printer_name"),
             processed_folder=data.get("processed_folder", "processed"),
             poll_interval_seconds=data.get("poll_interval_seconds", 1.0),
+            start_with_computer=data.get("start_with_computer", False),
         )
 
     @classmethod

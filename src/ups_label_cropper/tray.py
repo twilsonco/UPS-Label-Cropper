@@ -10,6 +10,7 @@ import pystray
 
 from ups_label_cropper.config import Config
 from ups_label_cropper.watcher import LabelWatcher
+from ups_label_cropper.autostart import is_windows, set_autostart_enabled, set_autostart_disabled
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
 
     root = tk.Tk()
     root.title("UPS Label Cropper - Settings")
-    root.geometry("500x350")
+    root.geometry("500x420")
     root.resizable(False, False)
 
     # Make it appear on top of the system tray icon
@@ -119,9 +120,18 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
         except ValueError:
             return False
 
+    # Start with Computer checkbox (Windows only)
+    autostart_var = tk.BooleanVar(value=config.start_with_computer and is_windows())
+    ttk.Checkbutton(
+        main_frame,
+        text="Start when computer boots",
+        variable=autostart_var,
+        state="normal" if is_windows() else "disabled"
+    ).grid(row=5, column=0, columnspan=3, sticky=tk.W, pady=(10, 0))
+
     # Buttons frame at bottom
     buttons_frame = ttk.Frame(main_frame)
-    buttons_frame.grid(row=6, column=0, columnspan=3, pady=(20, 0))
+    buttons_frame.grid(row=7, column=0, columnspan=3, pady=(20, 0))
 
     def save_settings():
         # Validate poll interval
@@ -147,8 +157,20 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
         # Update config object
         watcher.config.watched_directory = new_watched_dir
         watcher.config.printer_name = printer_var.get() if printer_var.get() else None
-        watcher.config.processed_folder = processed_var.get()
+        watcher.config.processed_folder = processed_entry.get()
         watcher.config.poll_interval_seconds = poll_val
+        watcher.config.start_with_computer = autostart_var.get()
+
+        # Handle Windows autostart registry
+        if is_windows():
+            try:
+                exe_path = sys.executable
+                if autostart_var.get():
+                    set_autostart_enabled(exe_path)
+                else:
+                    set_autostart_disabled()
+            except Exception as e:
+                logger.warning(f"Failed to update autostart registry: {e}")
 
         # Save to disk
         try:
