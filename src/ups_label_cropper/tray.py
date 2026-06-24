@@ -184,14 +184,8 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
 
 
 def _create_icon_image() -> Image.Image:
-    img = Image.new("RGB", (64, 64), color=(0, 80, 160))
-    draw = ImageDraw.Draw(img)
-    draw.rectangle((8, 12, 56, 52), fill=(255, 255, 255))
-    draw.rectangle((12, 16, 52, 48), fill=(200, 220, 255))
-    draw.rectangle((18, 22, 46, 28), fill=(0, 60, 140))
-    draw.rectangle((18, 30, 38, 36), fill=(0, 60, 140))
-    draw.rectangle((18, 38, 32, 44), fill=(0, 60, 140))
-    return img
+    icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.ico"
+    return Image.open(icon_path)
 
 
 def _build_menu(icon: pystray.Icon, watcher: LabelWatcher) -> pystray.Menu:
