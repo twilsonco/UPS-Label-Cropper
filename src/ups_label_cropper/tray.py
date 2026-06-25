@@ -298,7 +298,7 @@ def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
     )
 
     try:
-        icon.run(setup=setup)
+        icon.run_detached(setup=setup)
     except Exception as e:
         logger.error(f"Tray error: {e}")
     finally:
