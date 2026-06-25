@@ -205,8 +205,17 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
     root.mainloop()
 
 
+def _get_base_path() -> Path:
+    """Get the base path for bundled resources (works in dev and PyInstaller exe)."""
+    if getattr(sys, '_MEIPASS', None):
+        # Running as bundled PyInstaller exe
+        return Path(sys._MEIPASS)
+    # Running from source
+    return Path(__file__).parent.parent.parent
+
+
 def _create_icon_image() -> Image.Image:
-    icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.ico"
+    icon_path = _get_base_path() / "assets" / "icon.ico"
     return Image.open(icon_path)
 
 
