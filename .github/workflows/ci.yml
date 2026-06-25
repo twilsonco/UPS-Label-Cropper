@@ -26,9 +26,10 @@ jobs:
       - name: Build EXE
         shell: powershell
         run: |
-          pip install pyinstaller
-          pyinstaller --onefile --name "UPS-Label-Cropper" `
+          uv pip install pyinstaller
+          uv run pyinstaller --onefile --name "UPS-Label-Cropper" `
             --add-data "assets;assets" `
+            --icon "assets/icon.ico" `
             src/ups_label_cropper/__main__.py
       - uses: actions/upload-artifact@v4
         with:

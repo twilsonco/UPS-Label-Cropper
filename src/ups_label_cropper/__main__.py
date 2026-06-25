@@ -88,6 +88,9 @@ def main():
 
     if args.watch:
         run_watch_mode()
+    elif not args.input_pdf or not args.output_pdf:
+        parser.print_help()
+        sys.exit(1)
     else:
         sys.argv = [sys.argv[0], args.input_pdf, args.output_pdf]
         crop_main()
