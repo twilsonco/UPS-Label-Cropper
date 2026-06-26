@@ -62,6 +62,12 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
 
     # Make it appear on top of the system tray icon
     root.attributes("-topmost", True)
+    
+    # Force focus and grab after window is created to ensure click events register properly
+    # when pystray's message handling may be interfering
+    root.deiconify()
+    root.focus_force()
+    root.grab_set()
 
     config = watcher.config.copy() if hasattr(watcher, 'config') else Config.load()
     
@@ -298,7 +304,7 @@ def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
     )
 
     try:
-        icon.run_detached(setup=setup)
+        icon.run(setup=setup)
     except Exception as e:
         logger.error(f"Tray error: {e}")
     finally:
