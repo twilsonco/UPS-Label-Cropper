@@ -46,7 +46,7 @@ def _restart_watcher(watcher: LabelWatcher):
         logger.error(f"Failed to restart watcher: {e}")
 
 
-def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
+def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
     """Show a settings dialog using tkinter."""
     try:
         import tkinter as tk
@@ -60,12 +60,13 @@ def _show_settings_dialog(icon: pystray.Icon, watcher: LabelWatcher):
     root.geometry("500x420")
     root.resizable(False, False)
 
-    # Make it appear on top of the system tray icon
-    root.attributes("-topmost", True)
+    # Remove topmost attribute as it can interfere with focus and click events
+    # The system tray popup already provides proper z-ordering
     
-    # Force focus and grab after window is created to ensure click events register properly
-    # when pystray's message handling may be interfering
-    root.deiconify()
+    # Update the window to ensure it's fully initialized before we interact with it
+    root.update()
+    
+    # Set focus and grab after update to ensure Windows properly routes input
     root.focus_force()
     root.grab_set()
 
@@ -244,7 +245,7 @@ def _build_menu(icon: pystray.Icon, watcher: LabelWatcher) -> pystray.Menu:
             icon.update_title("UPS Label Cropper")
 
     def on_settings(icon, item):
-        _show_settings_dialog(icon, watcher)
+        _show_settings_dialog(None, watcher)
 
     def on_show_logs(icon, item):
         log_path = _get_log_path()
@@ -303,8 +304,17 @@ def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
         menu=_build_menu(None, watcher),
     )
 
+    # Use run_detached so we can hand control to tkinter's mainloop for the settings dialog.
+    # icon.run() blocks and causes nested event loop issues on Windows with PyInstaller.
     try:
-        icon.run(setup=setup)
+        icon.run_detached(setup=setup)
+        
+        # Keep running - the program stays alive because this function is called
+        # from run_watch_mode which doesn't exit while watching
+        import time
+        while True:
+            time.sleep(1.0)
+            
     except Exception as e:
         logger.error(f"Tray error: {e}")
     finally:
