@@ -6,10 +6,11 @@ requires-python = ">=3.10"
 dependencies = [
     "PyMuPDF>=1.23.0",
     "watchdog>=3.0.0",
-    "pystray>=0.19.0",
     "Pillow>=10.0.0",
     "pywin32; platform_system == 'Windows'",
     "platformdirs>=4.0.0",
+    # System tray icon (Windows only)
+    "infi-systray>=0.1.12.1; platform_system == 'Windows'",
 ]
 
 [project.scripts]

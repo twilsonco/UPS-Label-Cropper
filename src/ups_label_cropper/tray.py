@@ -2,11 +2,13 @@ import logging
 import subprocess
 import sys
 from dataclasses import asdict
-from io import BytesIO
 from pathlib import Path
 
-from PIL import Image, ImageDraw
-import pystray
+# infi.systray is Windows-only and uses pywin32 to run tray in its own thread
+try:
+    from infi.systray import SysTrayIcon
+except ImportError:
+    SysTrayIcon = None
 
 from ups_label_cropper.config import Config
 from ups_label_cropper.watcher import LabelWatcher
@@ -15,10 +17,13 @@ from ups_label_cropper.autostart import is_windows, set_autostart_enabled, set_a
 
 logger = logging.getLogger(__name__)
 
+# Global reference to systray icon for updating menu
+_systray_icon: "SysTrayIcon | None" = None
+_watcher_ref: "LabelWatcher | None" = None
+
 
 def _get_log_path() -> Path:
     """Get the path to the log file."""
-    from pathlib import Path
     config_path = Config.default_config_path()
     return config_path.parent / "cropper.log"
 
@@ -46,8 +51,14 @@ def _restart_watcher(watcher: LabelWatcher):
         logger.error(f"Failed to restart watcher: {e}")
 
 
-def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
+def _show_settings_dialog():
     """Show a settings dialog using tkinter."""
+    global _systray_icon, _watcher_ref
+    
+    if not is_windows():
+        logger.warning("Settings dialog only supported on Windows")
+        return
+    
     try:
         import tkinter as tk
         from tkinter import ttk, filedialog, messagebox
@@ -55,26 +66,15 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
         logger.error("tkinter not available for settings dialog")
         return
 
+    watcher = _watcher_ref
+    
     root = tk.Tk()
     root.title("UPS Label Cropper - Settings")
     root.geometry("500x420")
     root.resizable(False, False)
 
-    # Remove topmost attribute as it can interfere with focus and click events
-    # The system tray popup already provides proper z-ordering
-    
-    # Update the window to ensure it's fully initialized before we interact with it
-    root.update()
-    
-    # Set focus and grab after update to ensure Windows properly routes input
-    root.focus_force()
-    root.grab_set()
-
     config = watcher.config.copy() if hasattr(watcher, 'config') else Config.load()
-    
-    # Store original values for comparison
-    original_config = asdict(config)
-    
+
     # Create a frame with padding
     main_frame = ttk.Frame(root, padding="20")
     main_frame.pack(fill=tk.BOTH, expand=True)
@@ -90,7 +90,6 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
     watched_entry.grid(row=1, column=1, pady=8)
 
     def select_watch_directory():
-        # Withdraw the root window to avoid focus issues with native file dialog on macOS
         root.withdraw()
         directory = filedialog.askdirectory(
             title="Select Watch Directory",
@@ -120,13 +119,6 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
     poll_entry = ttk.Entry(main_frame, textvariable=poll_var, width=10)
     poll_entry.grid(row=4, column=1, sticky=tk.W, pady=8)
 
-    def validate_poll():
-        try:
-            val = float(poll_var.get())
-            return 0.1 <= val <= 60.0
-        except ValueError:
-            return False
-
     # Start with Computer checkbox (Windows only)
     autostart_var = tk.BooleanVar(value=config.start_with_computer and is_windows())
     ttk.Checkbutton(
@@ -141,7 +133,6 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
     buttons_frame.grid(row=7, column=0, columnspan=3, pady=(20, 0))
 
     def save_settings():
-        # Validate poll interval
         try:
             poll_val = float(poll_var.get())
             if not (0.1 <= poll_val <= 60.0):
@@ -156,7 +147,7 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
             return
 
         new_watched_dir = watched_var.get()
-        restart_watcher = (
+        restart_watcher_flag = (
             new_watched_dir != watcher.config.watched_directory or
             poll_val != watcher.config.poll_interval_seconds
         )
@@ -179,13 +170,12 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
             except Exception as e:
                 logger.warning(f"Failed to update autostart registry: {e}")
 
-        # Save to disk
+        # Save to disk and restart watcher if needed
         try:
             watcher.config.save()
             logger.info("Settings saved successfully")
 
-            # Restart watcher if directory or poll interval changed
-            if restart_watcher and hasattr(watcher, '_running') and watcher._running:
+            if restart_watcher_flag and hasattr(watcher, '_running') and watcher._running:
                 _restart_watcher(watcher)
 
             root.withdraw()
@@ -197,11 +187,8 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
             messagebox.showerror("Error", f"Failed to save settings: {e}")
             root.deiconify()
 
-    def cancel():
-        root.destroy()
-
     ttk.Button(buttons_frame, text="Save", command=save_settings).pack(side=tk.LEFT, padx=5)
-    ttk.Button(buttons_frame, text="Cancel", command=cancel).pack(side=tk.LEFT, padx=5)
+    ttk.Button(buttons_frame, text="Cancel", command=root.destroy).pack(side=tk.LEFT, padx=5)
 
     # Center the window on screen
     root.update_idletasks()
@@ -209,112 +196,143 @@ def _show_settings_dialog(icon: pystray.Icon | None, watcher: LabelWatcher):
     y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
     root.geometry(f"+{x}+{y}")
 
+    # Ensure window is focused and interactive
+    root.deiconify()
+    root.focus_force()
+    root.grab_set()
+
     root.mainloop()
+
+
+def _show_logs():
+    """Open the log file in notepad."""
+    log_path = _get_log_path()
+    try:
+        subprocess.run(["notepad.exe", str(log_path)], check=False)
+    except Exception as e:
+        logger.error(f"Failed to open log file: {e}")
+
+
+def _toggle_pause_resume(systray):
+    """Toggle the watcher pause/resume state."""
+    global _systray_icon, _watcher_ref
+    
+    if not _watcher_ref:
+        return
+        
+    try:
+        if getattr(_watcher_ref, "_running", False):
+            _watcher_ref.stop()
+            _watcher_ref._running = False
+        else:
+            _watcher_ref.start()
+            _watcher_ref._running = True
+        
+        # Update the hover text to reflect current state
+        status = "Paused" if not _watcher_ref._running else f"Watching {_watcher_ref.config.watched_directory}"
+        systray.update(hover_text=f"UPS Label Cropper - {status}")
+    except Exception as e:
+        logger.error(f"Failed to toggle watcher: {e}")
+
+
+def _get_status() -> str:
+    """Get current watcher status."""
+    global _watcher_ref
+    if not _watcher_ref or not hasattr(_watcher_ref, "_running"):
+        return "Idle"
+    return f"Watching {_watcher_ref.config.watched_directory}" if _watcher_ref._running else "Paused"
+
+
+def _on_quit(systray):
+    """Handle quit action."""
+    global _systray_icon, _watcher_ref
+    
+    # Stop the watcher first
+    if _watcher_ref and getattr(_watcher_ref, "_running", False):
+        try:
+            _watcher_ref.stop()
+            _watcher_ref._running = False
+        except Exception as e:
+            logger.error(f"Error stopping watcher: {e}")
+    
+    # Shutdown systray - this will stop the icon thread
+    systray.shutdown()
 
 
 def _get_base_path() -> Path:
     """Get the base path for bundled resources (works in dev and PyInstaller exe)."""
     if getattr(sys, '_MEIPASS', None):
-        # Running as bundled PyInstaller exe
         return Path(sys._MEIPASS)
-    # Running from source
     return Path(__file__).parent.parent.parent
 
 
-def _create_icon_image() -> Image.Image:
-    icon_path = _get_base_path() / "assets" / "icon.ico"
-    return Image.open(icon_path)
-
-
-def _build_menu(icon: pystray.Icon, watcher: LabelWatcher) -> pystray.Menu:
-    def get_status() -> str:
-        if not hasattr(watcher, "_running"):
-            return "Idle"
-        return f"Watching {watcher.config.watched_directory}" if watcher._running else "Paused"
-
-    def on_pause_resume(icon, item):
-        if getattr(watcher, "_running", False):
-            watcher.stop()
-            watcher._running = False
-            icon.menu = _build_menu(icon, watcher)
-            icon.update_title("UPS Label Cropper - Paused")
-        else:
-            watcher.start()
-            watcher._running = True
-            icon.menu = _build_menu(icon, watcher)
-            icon.update_title("UPS Label Cropper")
-
-    def on_settings(icon, item):
-        _show_settings_dialog(None, watcher)
-
-    def on_show_logs(icon, item):
-        log_path = _get_log_path()
-        try:
-            if sys.platform == "win32":
-                # Use notepad.exe which is available on all Windows versions
-                subprocess.run(["notepad.exe", str(log_path)], check=False)
-            else:
-                subprocess.run(["xdg-open", str(log_path)])
-        except Exception as e:
-            logger.error(f"Failed to open log file: {e}")
-
-    def on_exit(icon, item):
-        icon.visible = False
-        if getattr(watcher, "_running", False):
-            watcher.stop()
-        icon.stop()
-
-    return pystray.Menu(
-        pystray.MenuItem("Status: " + get_status(), None, enabled=False),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem(
-            "Pause" if getattr(watcher, "_running", True) else "Resume",
-            on_pause_resume,
-        ),
-        pystray.MenuItem("Settings", on_settings),
-        pystray.MenuItem("Show Logs", on_show_logs),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Exit", on_exit),
-    )
-
-
 def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
-    if config is None:
-        config = Config.load()
-    if watcher is None:
-        watcher = LabelWatcher(config)
+    """Run the system tray icon using infi.systray (Windows-only)."""
+    global _systray_icon, _watcher_ref
+    
+    if not is_windows():
+        logger.warning("System tray requires Windows - use CLI mode instead")
+        return
+        
+    if SysTrayIcon is None:
+        logger.error("infi.systray not installed")
+        return
 
+    # Start the watcher
     try:
+        if config is None:
+            config = Config.load()
+        if watcher is None:
+            watcher = LabelWatcher(config)
+        
+        _watcher_ref = watcher
+        
         watcher.start()
         watcher._running = True
     except Exception as e:
         logger.error(f"Failed to start watcher: {e}")
         return
 
-    icon_image = _create_icon_image()
+    # Get icon path
+    base_path = _get_base_path()
+    icon_path = base_path / "assets" / "icon.ico"
+    
+    if not icon_path.exists():
+        logger.warning(f"Icon not found at {icon_path}, using default")
+        icon_path = None  # Will use system default
 
-    def setup(icon):
-        icon.menu = _build_menu(icon, watcher)
-        icon.visible = True
+    status_text = f"UPS Label Cropper - {_get_status()}"
 
-    icon = pystray.Icon(
-        "ups_label_cropper",
-        icon_image,
-        "UPS Label Cropper",
-        menu=_build_menu(None, watcher),
+    def on_settings(systray):
+        _show_settings_dialog()
+
+    def on_show_logs(systray):
+        _show_logs()
+
+    menu_options = (
+        ("Settings", None, on_settings),
+        ("Show Logs", None, on_show_logs),
     )
 
-    # Use run_detached so we can hand control to tkinter's mainloop for the settings dialog.
-    # icon.run() blocks and causes nested event loop issues on Windows with PyInstaller.
     try:
-        icon.run_detached(setup=setup)
+        systray = SysTrayIcon(
+            str(icon_path) if icon_path else None,
+            status_text,
+            menu_options,
+            on_quit=_on_quit,
+            default_menu_index=0
+        )
         
-        # Keep running - the program stays alive because this function is called
-        # from run_watch_mode which doesn't exit while watching
-        import time
-        while True:
-            time.sleep(1.0)
-            
+        _systray_icon = systray
+        
+        # Start runs in its own thread - doesn't block
+        with systray:
+            # Block main thread while the tray icon runs
+            # This keeps the program alive until quit is clicked
+            import time
+            while True:
+                time.sleep(1.0)
+                
     except Exception as e:
         logger.error(f"Tray error: {e}")
     finally:
