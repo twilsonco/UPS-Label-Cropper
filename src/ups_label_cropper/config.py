@@ -13,6 +13,7 @@ class Config:
     processed_folder: str = "processed"
     poll_interval_seconds: float = 1.0
     start_with_computer: bool = False
+    first_run: bool = True
 
     def copy(self) -> "Config":
         """Return a shallow copy of the config."""
@@ -44,6 +45,7 @@ class Config:
             processed_folder=data.get("processed_folder", "processed"),
             poll_interval_seconds=data.get("poll_interval_seconds", 1.0),
             start_with_computer=data.get("start_with_computer", False),
+            first_run=data.get("first_run", True),
         )
 
     @classmethod

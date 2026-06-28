@@ -159,6 +159,7 @@ def _show_settings_dialog():
         watcher.config.processed_folder = processed_entry.get()
         watcher.config.poll_interval_seconds = poll_val
         watcher.config.start_with_computer = autostart_var.get()
+        watcher.config.first_run = False
 
         # Handle Windows autostart registry
         if is_windows():
@@ -335,6 +336,11 @@ def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
             # Block main thread while the tray icon runs
             # The SyTrayIcon message loop keeps this alive; clicking "Quit" terminates
             import time
+            
+            # if first_run, show settings dialog
+            if _watcher_ref and _watcher_ref.config.first_run:
+                _show_settings_dialog()
+            
             while True:
                 try:
                     if _was_quit:
