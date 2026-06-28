@@ -71,7 +71,7 @@ def _show_settings_dialog():
     
     root = tk.Tk()
     root.title("UPS Label Cropper - Settings")
-    root.geometry("500x420")
+    root.geometry("480x320")
     root.resizable(False, False)
 
     config = watcher.config.copy() if hasattr(watcher, 'config') else Config.load()
