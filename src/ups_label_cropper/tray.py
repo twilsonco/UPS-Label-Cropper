@@ -256,13 +256,8 @@ def _on_quit(systray):
         except Exception as e:
             logger.error(f"Error stopping watcher: {e}")
     
-    # Stop systray loop, which will exit the `with` block and clean up
-    try:
-        systray.stop()
-    except Exception:
-        pass
-    
-    # Hide the icon
+    # Hide the icon and terminate gracefully — _destroy from systray handles
+    # calling shutdown/join after this callback returns.
     systray.update(hover_text="")
 
 
@@ -335,14 +330,13 @@ def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
         # Start runs in its own thread - doesn't block
         with systray:
             # Block main thread while the tray icon runs
-            # This keeps the program alive until quit is clicked
+            # The SyTrayIcon message loop keeps this alive; clicking "Quit" terminates
             import time
-            nonlocal_should_quit = False
-            while not nonlocal_should_quit:
+            while True:
                 try:
                     time.sleep(1.0)
                 except KeyboardInterrupt:
-                    nonlocal_should_quit = True
+                    break
                 
     except Exception as e:
         logger.error(f"Tray error: {e}")
