@@ -71,7 +71,7 @@ def main():
     parser.add_argument(
         "--watch",
         action="store_true",
-        help="Run in watch mode, monitoring a directory for new PDFs",
+        help="Run in watch mode, monitoring a directory for new PDFs (default behavior if no input/output PDF is specified)",
     )
     parser.add_argument(
         "input_pdf",
