@@ -30,7 +30,7 @@ jobs:
           uv run pyinstaller --onefile --noconsole `
             --name "UPS-Label-Cropper" `
             --add-data "assets;assets" `
-            --add-data "src/ups_label_cropper/bin:src/ups_label_cropper/bin" `
+            --add-data "src/ups_label_cropper/bin:ups_label_cropper/bin" `
             --icon "assets/icon.ico" `
             src/ups_label_cropper/__main__.py
       - uses: actions/upload-artifact@v4
