@@ -243,11 +243,10 @@ def _get_status() -> str:
     return f"Watching {_watcher_ref.config.watched_directory}" if _watcher_ref._running else "Paused"
 
 
-_should_quit: bool = False
 
 def _on_quit(systray):
     """Handle quit action."""
-    global _systray_icon, _watcher_ref, _should_quit
+    global _systray_icon, _watcher_ref
     
     # Stop the watcher first
     if _watcher_ref and getattr(_watcher_ref, "_running", False):
@@ -257,11 +256,13 @@ def _on_quit(systray):
         except Exception as e:
             logger.error(f"Error stopping watcher: {e}")
     
-    # Set quit flag - don't call shutdown() directly from callback
-    # because it would try to join the current thread (itself), causing RuntimeError
-    _should_quit = True
+    # Stop systray loop, which will exit the `with` block and clean up
+    try:
+        systray.stop()
+    except Exception:
+        pass
     
-    # Simply hide the icon - will be cleaned up when while loop exits
+    # Hide the icon
     systray.update(hover_text="")
 
 
@@ -336,11 +337,12 @@ def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
             # Block main thread while the tray icon runs
             # This keeps the program alive until quit is clicked
             import time
-            while not _should_quit:
+            nonlocal_should_quit = False
+            while not nonlocal_should_quit:
                 try:
                     time.sleep(1.0)
                 except KeyboardInterrupt:
-                    _should_quit = True
+                    nonlocal_should_quit = True
                 
     except Exception as e:
         logger.error(f"Tray error: {e}")
