@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 _systray_icon: "SysTrayIcon | None" = None
 _watcher_ref: "LabelWatcher | None" = None
 
+_was_quit: bool = False
 
 def _get_log_path() -> Path:
     """Get the path to the log file."""
@@ -259,6 +260,8 @@ def _on_quit(systray):
     # Hide the icon and terminate gracefully — _destroy from systray handles
     # calling shutdown/join after this callback returns.
     systray.update(hover_text="")
+    global _was_quit
+    _was_quit = True
 
 
 def _get_base_path() -> Path:
@@ -334,6 +337,8 @@ def run_tray(config: Config | None = None, watcher: LabelWatcher | None = None):
             import time
             while True:
                 try:
+                    if _was_quit:
+                        break
                     time.sleep(1.0)
                 except KeyboardInterrupt:
                     break
