@@ -49,6 +49,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      - uses: actions/checkout@v7
       - uses: googleapis/release-please-action@v5
         id: release
         with:
@@ -60,6 +61,8 @@ jobs:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
@@ -77,6 +80,9 @@ jobs:
             --icon "assets/icon.ico" `
             src/ups_label_cropper/__main__.py
       - name: Upload Release Artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: dist/UPS-Label-Cropper.exe
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/UPS-Label-Cropper.exe
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
