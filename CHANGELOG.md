@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.2.0...v1.2.1) (2026-07-03)
+
+
+### Bug Fixes
+
+* ci optimization ([5840eba](https://github.com/twilsonco/UPS-Label-Cropper/commit/5840eba94b9eeae209275145b40688638cf60f8e))
+
 ## [1.2.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.1.1...v1.2.0) (2026-07-03)
 
 
