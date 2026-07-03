@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.2.1...v1.2.2) (2026-07-03)
+
+
+### Bug Fixes
+
+* improve printed message after starting tray ([9dc7bde](https://github.com/twilsonco/UPS-Label-Cropper/commit/9dc7bdec65e5b5ba565f26b1604dc97abff30c16))
+
 ## [1.2.1](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.2.0...v1.2.1) (2026-07-03)
 
 
