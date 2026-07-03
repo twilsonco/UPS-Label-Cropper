@@ -52,8 +52,8 @@ def run_watch_mode():
     else:
         print(f"    Using:           {printer_display} [! NOT FOUND]")
     print("\n" + "-" * 60)
-    print("  System tray icon is running in the background.")
-    print("  Right-click it to pause/resume or exit.")
+    print("  System tray icon is running in the background")
+    print("  Right-click it to pause/resume or exit")
     print("-" * 60 + "\n")
 
     logger.info(f"Starting UPS Label Cropper in watch mode...")
