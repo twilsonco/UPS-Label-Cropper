@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.2.2...v1.3.0) (2026-07-14)
+
+
+### Features
+
+* **watch:** save cropped PDF to processed folder ([4082b03](https://github.com/twilsonco/UPS-Label-Cropper/commit/4082b034db6ef4ef52b25f49fbe2fafc21476d46))
+
 ## [1.2.2](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.2.1...v1.2.2) (2026-07-03)
 
 
