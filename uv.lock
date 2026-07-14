@@ -311,7 +311,7 @@ wheels = [
 
 [[package]]
 name = "ups-label-cropper"
-version = "0.1.0"
+version = "1.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "infi-systray", marker = "sys_platform == 'win32'" },

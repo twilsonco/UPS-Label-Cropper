@@ -1,5 +1,4 @@
 import logging
-import tempfile
 import time
 from pathlib import Path
 
@@ -77,7 +76,6 @@ class LabelFileHandler(FileSystemEventHandler):
 class LabelPipeline:
     def __init__(self, config: Config):
         self.config = config
-        self._temp_files: list[Path] = []
 
     def run(self, input_pdf: Path) -> bool:
         input_pdf = Path(input_pdf).resolve()
@@ -91,12 +89,12 @@ class LabelPipeline:
             logger.error(f"[PIPELINE] File is not a valid PDF: {input_pdf}: {e}")
             return False
 
-        temp_output = Path(tempfile.gettempdir()) / f"ups_cropped_{int(time.time()*1000)}.pdf"
-        self._temp_files.append(temp_output)
+        processed_dir = self.config.get_processed_dir()
+        processed_pdf = self._get_processed_path(input_pdf, processed_dir)
 
         try:
             logger.info(f"[PIPELINE] Cropping label...")
-            process_label(str(input_pdf), str(temp_output))
+            process_label(str(input_pdf), str(processed_pdf))
         except Exception as e:
             logger.error(f"[PIPELINE] Crop failed for {input_pdf}: {e}")
             return False
@@ -104,16 +102,28 @@ class LabelPipeline:
         printer_desc = self.config.printer_name or "system default"
         try:
             logger.info(f"[PIPELINE] Sending to printer: {printer_desc}")
-            print_pdf(temp_output, printer_name=self.config.printer_name)
+            print_pdf(processed_pdf, printer_name=self.config.printer_name)
             logger.info(f"[PIPELINE] Print job sent successfully")
         except Exception as e:
             logger.error(f"[PIPELINE] Print failed: {e}")
             return False
 
-        self._cleanup_temp()
         self._archive_source(input_pdf)
         logger.info(f"[PIPELINE] Processing complete for {input_pdf.name}")
         return True
+
+    def _get_processed_path(self, source: Path, processed_dir: Path) -> Path:
+        """Get a path for the processed PDF in the processed directory.
+
+        Adds '_processed' suffix before the extension. Handles naming conflicts
+        by appending a counter.
+        """
+        dest = processed_dir / f"{source.stem}_processed{source.suffix}"
+        counter = 1
+        while dest.exists():
+            dest = processed_dir / f"{source.stem}_processed_{counter}{source.suffix}"
+            counter += 1
+        return dest
 
     def _archive_source(self, source: Path):
         try:
@@ -129,15 +139,6 @@ class LabelPipeline:
             logger.info(f"Archived to: {dest}")
         except Exception as e:
             logger.error(f"Failed to archive source file {source}: {e}")
-
-    def _cleanup_temp(self):
-        for tf in self._temp_files:
-            try:
-                if tf.exists():
-                    tf.unlink()
-            except Exception:
-                pass
-        self._temp_files.clear()
 
 
 class LabelWatcher:
