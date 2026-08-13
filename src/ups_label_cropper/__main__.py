@@ -22,8 +22,22 @@ def run_watch_mode():
         filename=str(log_path),
     )
 
+    # Ensure a stable copy of the bundled SumatraPDF exists and sweep any stale
+    # PyInstaller one-file temp folders left behind by previous runs.
+    from ups_label_cropper.printer import (
+        ensure_sumatra_present,
+        cleanup_stale_temp_dirs,
+        get_system_default_printer,
+        _validate_printer,
+    )
+    if sys.platform == "win32":
+        try:
+            ensure_sumatra_present()
+            cleanup_stale_temp_dirs()
+        except Exception as e:  # never let housekeeping block startup
+            logger.warning(f"Startup printer setup failed: {e}")
+
     from ups_label_cropper.tray import run_tray
-    from ups_label_cropper.printer import get_system_default_printer, _validate_printer
 
     # Determine printer and validate
     if config.printer_name:
