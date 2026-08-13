@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.3.0...v1.4.0) (2026-08-13)
+
+
+### Features
+
+* **printer:** ensure stable SumatraPDF copy and cleanup stale temp directories ([1849e13](https://github.com/twilsonco/UPS-Label-Cropper/commit/1849e133c228156e54b1fab5cdfa20e174cf9ed4))
+
 ## [1.3.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.2.2...v1.3.0) (2026-07-14)
 
 
