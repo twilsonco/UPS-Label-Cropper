@@ -1,6 +1,6 @@
 [project]
 name = "ups-label-cropper"
-version = "1.3.0"
+version = "1.4.0"
 description = "UPS Label Cropper - Auto-rotates and scales UPS labels for thermal printer printing"
 requires-python = ">=3.10"
 dependencies = [
