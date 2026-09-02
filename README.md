@@ -6,6 +6,7 @@ Auto-rotates and scales UPS shipping labels for thermal printer printing.
 
 ## Features
 
+- **Multi-label support** — handles UPS multi-box shipment PDFs with two labels per page (top and bottom halves), as well as single-label PDFs; each label is output on its own page
 - **Auto-detection** of landscape content within PDFs with automatic 90° counter-clockwise rotation
 - **Content-aware scaling** using embedded image/drawing dimensions, not page size
 - **Aspect-preserving** scale-to-fit within 100mm × 150mm bounds (4" × 6")

@@ -256,20 +256,28 @@ assets/
 
 ### Cropping Pipeline
 
-1. Opens the input PDF with PyMuPDF, reading only page 1
-2. Determines content dimensions using:
-   - `page.get_image_info()` (raster images)
-   - Falls back to `page.get_drawings()` (vector graphics)
-   - Falls back to full page size
-3. Detects landscape (`width > height`) and rotates 90° counter-clockwise if needed
-4. Captures the content region at:
-   - **300 DPI** for landscape sources
-   - **150 DPI** for portrait
-5. Scales to fit within target bounds (4" × 6" @ 283.5pt × 425.2pt) with margins:
-   - ~1.12x padding multiplier for landscape
-   - ~1.05x padding multiplier for portrait
-6. Centers and inserts into a new portrait page
-7. Saves the output PDF
+UPS multi-box shipments produce label sheets with **two labels per page**
+(top half and bottom half), each printed sideways. The pipeline handles both
+single-label and multi-label PDFs:
+
+1. Opens the input PDF with PyMuPDF and iterates over **every page**
+2. Splits each page into its **top and bottom halves** at the vertical midpoint
+3. For each half, detects a label using:
+   - `page.get_image_info()` (raster images), assigning each image to the half
+     containing its vertical center
+   - Falls back to `page.get_drawings()` (vector graphics) only for pages with
+     no images
+   - Halves with no content large enough to be a label are **skipped** (logged
+     at DEBUG level)
+4. For each detected label:
+   - Detects landscape (`width > height`) and rotates 90° counter-clockwise if needed
+   - Captures the content region at:
+     - **300 DPI** for landscape sources
+     - **150 DPI** for portrait
+   - Scales to fit within target bounds (4" × 6" @ 283.5pt × 425.2pt) with a
+     ~1mm margin, preserving aspect ratio
+   - Centers and inserts into a new portrait page
+5. Saves the output PDF containing **one label per page** (in reading order)
 
 ### Watch Mode Pipeline
 
