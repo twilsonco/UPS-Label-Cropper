@@ -176,31 +176,59 @@ Task Scheduler handles systems that boot before Python is ready:
 
 ## Building the Windows EXE
 
+The build is defined in **`UPS-Label-Cropper.spec`** (PyInstaller spec file) and
+produces a **one-folder** bundle, not a single `.exe`. This is deliberate:
+
+- **One-folder, not one-file.** One-file EXEs self-extract to `%TEMP%\_MEIxxxxxx`
+  and run from there, which Windows Defender's machine-learning heuristics flag
+  as `Trojan:Win32/Wacatac.B!ml`. One-folder avoids that entirely.
+- **Version metadata.** `build/version_info.py` generates a VERSIONINFO resource
+  so the EXE carries a real CompanyName/ProductVersion (unsigned binaries with
+  blank metadata are flagged hardest). The version comes from the
+  `UPS_LABEL_CROPPER_VERSION` env var (CI sets it from the release tag), falling
+  back to the `pyproject.toml` version.
+- **No UPX.** Compression is disabled in the spec — packed PEs are another AV trigger.
+
 ### Build Locally with PyInstaller
 
-PyInstaller packages the Python application into a standalone `.exe` file that doesn't require Python to be installed.
-
 1. Make sure you have the full development environment set up (see [Workspace Setup](#workspace-setup))
-2. Download the portable version of [SumatraPDF](https://www.sumatrapdfreader.org/download-free-pdf-viewer) and place it in `src/ups_label_cropper/bin`
+2. Download the portable version of [SumatraPDF](https://www.sumatrapdfreader.org/download-free-pdf-viewer) and place it in `src/ups_label_cropper/bin` (must match the pinned SHA-256 in `src/ups_label_cropper/bin/README.md` or CI fails)
 3. Run:
    ```powershell
-   uv pip install pyinstaller
-   uv run pyinstaller --onefile --noconsole `
-     --name "UPS-Label-Cropper" `
-     --add-data "assets;assets" `
-     --add-data "src/ups_label_cropper/bin:ups_label_cropper/bin" `
-     --icon "assets/icon.ico" `
-     src/ups_label_cropper/__main__.py
+   uv sync --group build
+   uv run pyinstaller --clean --noconfirm UPS-Label-Cropper.spec
    ```
-4. The built executable will be in `dist/UPS-Label-Cropper.exe`
+4. The bundle is in `dist/UPS-Label-Cropper/` — the EXE plus its `_internal/`
+   folder. Zip the whole folder to distribute; users extract and run the `.exe`
+   inside it.
+
+To verify the version metadata landed in the EXE:
+
+```powershell
+Get-Item .\dist\UPS-Label-Cropper\UPS-Label-Cropper.exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion
+```
 
 ### Automated Build via CI
 
-The CI pipeline (see `.github/workflows/ci.yml`) automatically builds the EXE after tests pass and publishes it as a release artifact. When you push to the main branch or create a pull request:
+The CI pipeline (see `.github/workflows/ci.yml`) builds and publishes on release:
 
-1. Tests run first (`pytest`)
-2. If tests pass, the Windows EXE is built
-3. For releases, the EXE is uploaded as a release asset
+1. Tests run first (`pytest`), including a SHA-256 integrity check on the
+   bundled `SumatraPDF.exe` (a modified copy loses Sumatra's own signature and
+   would become a genuine AV detection).
+2. On a release, the spec build runs with `UPS_LABEL_CROPPER_VERSION` set to the
+   release tag, then logs the EXE's version metadata and Authenticode status.
+3. `dist/UPS-Label-Cropper/` is zipped to `UPS-Label-Cropper-windows-x64.zip`
+   and uploaded as the release asset.
+
+### Reducing Antivirus False Positives
+
+The unsigned build may still trigger SmartScreen "unknown publisher" warnings
+(a *reputation* issue, distinct from the `Wacatac.B!ml` heuristic). Mitigations
+in place: one-folder layout, version metadata, no UPX, and no runtime
+unpack-and-execute behaviour. If a specific release is falsely flagged, submit
+the exact file at <https://www.microsoft.com/en-us/wdsi/filesubmission>
+(per-hash; a rebuild changes the hash). The permanent fix is an Authenticode
+signature (e.g. Azure Trusted Signing or an OV cert), not yet configured.
 
 ---
 
@@ -229,19 +257,24 @@ uv run pytest tests/test_crop.py -v
 ## Project Structure
 
 ```
+UPS-Label-Cropper.spec   # PyInstaller build definition (one-dir, versioned)
+build/
+└── version_info.py      # Generates the EXE VERSIONINFO resource at build time
+
 src/ups_label_cropper/
 ├── __init__.py      # Public API re-exports
 ├── __main__.py      # CLI entry point (watch mode by default)
 ├── crop.py          # Core cropping logic (PyMuPDF-based)
 ├── config.py        # JSON config read/write with dataclass interface
-├── printer.py       # Windows Print API via win32api.ShellExecute
+├── printer.py       # Silent PDF printing via bundled SumatraPDF
 ├── watcher.py       # watchdog Observer + label processing pipeline
-├── tray.py          # pystray system tray icon and menu
-└── bin/             # Supporting binaries (if any)
+├── tray.py          # infi.systray system tray icon and menu
+└── bin/             # Bundled SumatraPDF.exe (pinned, see bin/README.md)
 
 tests/
 ├── __init__.py
-└── test_crop.py     # Unit tests for crop.py
+├── test_crop.py                  # Unit tests for crop.py
+└── test_printer_resolution.py    # Read-only SumatraPDF lookup regression tests
 
 docs/
 └── README_DEV.md    # This file

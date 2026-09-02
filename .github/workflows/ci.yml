@@ -40,6 +40,14 @@ jobs:
           enable-cache: true
       - run: uv sync --dev
       - run: uv run pytest
+      - name: Verify bundled SumatraPDF integrity
+        # Guards against accidentally committing a modified/tampered
+        # SumatraPDF: a modified copy loses the author's Authenticode
+        # signature and becomes a genuine AV detection. Update this hash
+        # (and src/ups_label_cropper/bin/README.md) only when deliberately
+        # upgrading SumatraPDF from the official site.
+        run: |
+          echo "719f689b34f47be8ca105ce8484948474dafde0e106bab599e4a89326070c3d0  src/ups_label_cropper/bin/SumatraPDF.exe" | sha256sum -c -
 
   release-please:
     needs: [pre_job]
@@ -68,21 +76,31 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync
-      - name: Build EXE
+      - run: uv sync --group build
+      - name: Build EXE (one-dir, versioned metadata)
+        shell: powershell
+        env:
+          UPS_LABEL_CROPPER_VERSION: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          uv run pyinstaller --clean --noconfirm UPS-Label-Cropper.spec
+      - name: Log build provenance
         shell: powershell
         run: |
-          uv pip install pyinstaller
-          uv run pyinstaller --onefile --noconsole `
-            --name "UPS-Label-Cropper" `
-            --add-data "assets;assets" `
-            --add-data "src/ups_label_cropper/bin:ups_label_cropper/bin" `
-            --icon "assets/icon.ico" `
-            src/ups_label_cropper/__main__.py
+          $exe = "dist\UPS-Label-Cropper\UPS-Label-Cropper.exe"
+          Write-Host "== EXE version metadata =="
+          Get-Item $exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion, FileDescription
+          Write-Host "== Authenticode signatures =="
+          Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage, SignerCertificate
+          Get-AuthenticodeSignature "dist\UPS-Label-Cropper\_internal\ups_label_cropper\bin\SumatraPDF.exe" | Format-List Status, SignerCertificate
+      - name: Zip release artifact
+        shell: powershell
+        run: |
+          Compress-Archive -Path "dist\UPS-Label-Cropper" -DestinationPath "UPS-Label-Cropper-windows-x64.zip"
+          Get-FileHash -Algorithm SHA256 "UPS-Label-Cropper-windows-x64.zip"
       - name: Upload Release Artifact
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: dist/UPS-Label-Cropper.exe
+          files: UPS-Label-Cropper-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
