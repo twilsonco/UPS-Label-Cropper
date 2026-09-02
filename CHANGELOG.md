@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.4.0...v1.5.0) (2026-09-02)
+
+
+### Features
+
+* support UPS multi-label sheets ([f11f9e8](https://github.com/twilsonco/UPS-Label-Cropper/commit/f11f9e87e69b2a7ad26bd27265adbba86ecc93b7))
+
 ## [1.4.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.3.0...v1.4.0) (2026-08-13)
 
 
