@@ -76,6 +76,25 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+      - name: Verify bundled SumatraPDF integrity
+        # Hard release gate: the `test` job's copy of this check can be
+        # skipped by the path filter, and build-windows-exe intentionally
+        # does not depend on `test` (a release commit usually only touches
+        # version files, which would skip `test` and stall the release).
+        # So the release path re-verifies here, before anything is built
+        # or uploaded. A modified copy loses SumatraPDF's Authenticode
+        # signature and becomes a genuine AV detection. Keep this hash in
+        # sync with the test job and src/ups_label_cropper/bin/README.md.
+        shell: powershell
+        run: |
+          $expected = "719f689b34f47be8ca105ce8484948474dafde0e106bab599e4a89326070c3d0"
+          $actual = (Get-FileHash -Algorithm SHA256 "src\ups_label_cropper\bin\SumatraPDF.exe").Hash
+          # -ne is case-insensitive; Get-FileHash returns uppercase hex.
+          if ($actual -ne $expected) {
+            Write-Error "SumatraPDF.exe SHA-256 mismatch! expected=$expected actual=$actual Refusing to build a release from a tampered binary."
+            exit 1
+          }
+          Write-Host "SumatraPDF.exe integrity OK"
       - run: uv sync --group build
       - name: Build EXE (one-dir, versioned metadata)
         shell: powershell
