@@ -31,3 +31,9 @@ packages = ["src/ups_label_cropper"]
 dev = [
     "pytest>=9.0.3",
 ]
+# Windows EXE packaging. Pinned so releases are byte-reproducible: PyInstaller's
+# bootloader bytes feed into Defender's ML reputation, so we want to change it
+# deliberately (and re-submit the new hash to Microsoft) rather than by accident.
+build = [
+    "pyinstaller>=6.11,<7",
+]

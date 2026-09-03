@@ -14,7 +14,7 @@ Auto-rotates and scales UPS shipping labels for thermal printer printing.
 - **Watch mode** — monitors a folder and auto-processes new PDFs with system tray control
 - **Auto-printing** — sends cropped labels directly to a thermal printer
 - **Archive original files** after successful printing
-- **No installation required** — just download and run the `.exe`
+- **No Python required** — download the ZIP, extract, and run the `.exe`
 
 ## Target Dimensions
 
@@ -32,10 +32,25 @@ These dimensions match standard thermal label printer sizes (4" × 6" shipping l
 
 ### For Windows Users
 
-1. Go to the [**Releases** page](https://github.com/twilsonco/UPS-Label-Cropper/releases) and download the latest `UPS-Label-Cropper.exe`
-2. Run the `.exe` file
-3. **You may see a Windows security warning** (because the executable isn't signed). Click **More info**, then **Run anyway** to proceed
+1. Go to the [**Releases** page](https://github.com/twilsonco/UPS-Label-Cropper/releases) and download the latest `UPS-Label-Cropper-windows-x64.zip`
+2. **Extract the ZIP to a permanent folder** (right-click → **Extract All…**). Don't run the app from inside the ZIP, and don't extract it to a temp folder — running from a temp location can trigger the same security warnings this packaging avoids
+3. Run `UPS-Label-Cropper\UPS-Label-Cropper.exe`
 4. The program will start in watch mode and present you with settings on first run
+
+### Windows Security Warnings
+
+Because the executable is **not code-signed**, you may see a Windows security
+prompt the first time you run it (SmartScreen "unknown publisher"). This is a
+reputation warning, not a virus detection:
+
+- Click **More info** → **Run anyway** to proceed
+- The app is built from the public source in this repository and does not
+  access the network
+- If Windows Defender reports a **virus** (e.g. `Trojan:Win32/Wacatac.B!ml`),
+  that is a known false positive with unsigned PyInstaller apps. Please open a
+  [GitHub issue](https://github.com/twilsonco/UPS-Label-Cropper/issues) with the
+  detection name and the file's SHA-256 hash
+  (`Get-FileHash .\UPS-Label-Cropper.exe`) so we can submit it to Microsoft
 
 ### First Run
 

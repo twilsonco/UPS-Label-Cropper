@@ -40,6 +40,14 @@ jobs:
           enable-cache: true
       - run: uv sync --dev
       - run: uv run pytest
+      - name: Verify bundled SumatraPDF integrity
+        # Guards against accidentally committing a modified/tampered
+        # SumatraPDF: a modified copy loses the author's Authenticode
+        # signature and becomes a genuine AV detection. Update this hash
+        # (and src/ups_label_cropper/bin/README.md) only when deliberately
+        # upgrading SumatraPDF from the official site.
+        run: |
+          echo "719f689b34f47be8ca105ce8484948474dafde0e106bab599e4a89326070c3d0  src/ups_label_cropper/bin/SumatraPDF.exe" | sha256sum -c -
 
   release-please:
     needs: [pre_job]
@@ -58,8 +66,13 @@ jobs:
           manifest-file: .github/release-please-manifest.json
 
   build-windows-exe:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs: [test, release-please]
+    # Build whenever tests pass (PRs, pushes, manual runs) OR a release was
+    # created. Release commits usually touch only version files, which the
+    # path filter skips `test` for -- !cancelled() keeps this job alive when
+    # a needed job is skipped, and !failure() still blocks on real failures.
+    # Docs-only PRs (test skipped, no release) correctly build nothing.
+    if: ${{ !cancelled() && !failure() && (needs.test.result == 'success' || needs.release-please.outputs.release_created == 'true') }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -68,21 +81,60 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync
-      - name: Build EXE
+      - name: Verify bundled SumatraPDF integrity
+        # Gate runs in the build job itself, immediately before packaging:
+        # the `test` job's copy of this check can be skipped by the path
+        # filter (release commits usually touch only version files), so the
+        # job that actually ships the binary must re-verify it. A modified
+        # copy loses SumatraPDF's Authenticode signature and becomes a
+        # genuine AV detection. Keep this hash in sync with the test job and
+        # src/ups_label_cropper/bin/README.md.
         shell: powershell
         run: |
-          uv pip install pyinstaller
-          uv run pyinstaller --onefile --noconsole `
-            --name "UPS-Label-Cropper" `
-            --add-data "assets;assets" `
-            --add-data "src/ups_label_cropper/bin:ups_label_cropper/bin" `
-            --icon "assets/icon.ico" `
-            src/ups_label_cropper/__main__.py
+          $expected = "719f689b34f47be8ca105ce8484948474dafde0e106bab599e4a89326070c3d0"
+          $actual = (Get-FileHash -Algorithm SHA256 "src\ups_label_cropper\bin\SumatraPDF.exe").Hash
+          # -ne is case-insensitive; Get-FileHash returns uppercase hex.
+          if ($actual -ne $expected) {
+            Write-Error "SumatraPDF.exe SHA-256 mismatch! expected=$expected actual=$actual Refusing to build a release from a tampered binary."
+            exit 1
+          }
+          Write-Host "SumatraPDF.exe integrity OK"
+      - run: uv sync --group build
+      - name: Build EXE (one-dir, versioned metadata)
+        shell: powershell
+        env:
+          UPS_LABEL_CROPPER_VERSION: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          uv run pyinstaller --clean --noconfirm UPS-Label-Cropper.spec
+      - name: Log build provenance
+        shell: powershell
+        run: |
+          $exe = "dist\UPS-Label-Cropper\UPS-Label-Cropper.exe"
+          Write-Host "== EXE version metadata =="
+          Get-Item $exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion, FileDescription
+          Write-Host "== Authenticode signatures =="
+          Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage, SignerCertificate
+          Get-AuthenticodeSignature "dist\UPS-Label-Cropper\_internal\ups_label_cropper\bin\SumatraPDF.exe" | Format-List Status, SignerCertificate
+      - name: Zip release artifact
+        shell: powershell
+        run: |
+          Compress-Archive -Path "dist\UPS-Label-Cropper" -DestinationPath "UPS-Label-Cropper-windows-x64.zip"
+          Get-FileHash -Algorithm SHA256 "UPS-Label-Cropper-windows-x64.zip"
+      # Release builds attach the ZIP to the GitHub release...
       - name: Upload Release Artifact
+        if: ${{ needs.release-please.outputs.release_created == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: dist/UPS-Label-Cropper.exe
+          files: UPS-Label-Cropper-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      # ...everything else (PRs, manual runs) publishes it as a workflow
+      # artifact so the EXE can be tested without cutting a release.
+      - name: Upload Build Artifact
+        if: ${{ needs.release-please.outputs.release_created != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: UPS-Label-Cropper-windows-x64
+          path: UPS-Label-Cropper-windows-x64.zip
+          if-no-files-found: error
