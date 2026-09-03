@@ -66,8 +66,13 @@ jobs:
           manifest-file: .github/release-please-manifest.json
 
   build-windows-exe:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs: [test, release-please]
+    # Build whenever tests pass (PRs, pushes, manual runs) OR a release was
+    # created. Release commits usually touch only version files, which the
+    # path filter skips `test` for -- !cancelled() keeps this job alive when
+    # a needed job is skipped, and !failure() still blocks on real failures.
+    # Docs-only PRs (test skipped, no release) correctly build nothing.
+    if: ${{ !cancelled() && !failure() && (needs.test.result == 'success' || needs.release-please.outputs.release_created == 'true') }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -77,14 +82,13 @@ jobs:
         with:
           enable-cache: true
       - name: Verify bundled SumatraPDF integrity
-        # Hard release gate: the `test` job's copy of this check can be
-        # skipped by the path filter, and build-windows-exe intentionally
-        # does not depend on `test` (a release commit usually only touches
-        # version files, which would skip `test` and stall the release).
-        # So the release path re-verifies here, before anything is built
-        # or uploaded. A modified copy loses SumatraPDF's Authenticode
-        # signature and becomes a genuine AV detection. Keep this hash in
-        # sync with the test job and src/ups_label_cropper/bin/README.md.
+        # Gate runs in the build job itself, immediately before packaging:
+        # the `test` job's copy of this check can be skipped by the path
+        # filter (release commits usually touch only version files), so the
+        # job that actually ships the binary must re-verify it. A modified
+        # copy loses SumatraPDF's Authenticode signature and becomes a
+        # genuine AV detection. Keep this hash in sync with the test job and
+        # src/ups_label_cropper/bin/README.md.
         shell: powershell
         run: |
           $expected = "719f689b34f47be8ca105ce8484948474dafde0e106bab599e4a89326070c3d0"
@@ -116,10 +120,21 @@ jobs:
         run: |
           Compress-Archive -Path "dist\UPS-Label-Cropper" -DestinationPath "UPS-Label-Cropper-windows-x64.zip"
           Get-FileHash -Algorithm SHA256 "UPS-Label-Cropper-windows-x64.zip"
+      # Release builds attach the ZIP to the GitHub release...
       - name: Upload Release Artifact
+        if: ${{ needs.release-please.outputs.release_created == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: UPS-Label-Cropper-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      # ...everything else (PRs, manual runs) publishes it as a workflow
+      # artifact so the EXE can be tested without cutting a release.
+      - name: Upload Build Artifact
+        if: ${{ needs.release-please.outputs.release_created != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: UPS-Label-Cropper-windows-x64
+          path: UPS-Label-Cropper-windows-x64.zip
+          if-no-files-found: error
