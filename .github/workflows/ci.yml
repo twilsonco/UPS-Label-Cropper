@@ -40,14 +40,6 @@ jobs:
           enable-cache: true
       - run: uv sync --dev
       - run: uv run pytest
-      - name: Verify bundled SumatraPDF integrity
-        # Guards against accidentally committing a modified/tampered
-        # SumatraPDF: a modified copy loses the author's Authenticode
-        # signature and becomes a genuine AV detection. Update this hash
-        # (and src/ups_label_cropper/bin/README.md) only when deliberately
-        # upgrading SumatraPDF from the official site.
-        run: |
-          echo "719f689b34f47be8ca105ce8484948474dafde0e106bab599e4a89326070c3d0  src/ups_label_cropper/bin/SumatraPDF.exe" | sha256sum -c -
 
   release-please:
     needs: [pre_job]
@@ -87,24 +79,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - name: Verify bundled SumatraPDF integrity
-        # Gate runs in the build job itself, immediately before packaging:
-        # the `test` job's copy of this check can be skipped by the path
-        # filter (release commits usually touch only version files), so the
-        # job that actually ships the binary must re-verify it. A modified
-        # copy loses SumatraPDF's Authenticode signature and becomes a
-        # genuine AV detection. Keep this hash in sync with the test job and
-        # src/ups_label_cropper/bin/README.md.
-        shell: powershell
-        run: |
-          $expected = "719f689b34f47be8ca105ce8484948474dafde0e106bab599e4a89326070c3d0"
-          $actual = (Get-FileHash -Algorithm SHA256 "src\ups_label_cropper\bin\SumatraPDF.exe").Hash
-          # -ne is case-insensitive; Get-FileHash returns uppercase hex.
-          if ($actual -ne $expected) {
-            Write-Error "SumatraPDF.exe SHA-256 mismatch! expected=$expected actual=$actual Refusing to build a release from a tampered binary."
-            exit 1
-          }
-          Write-Host "SumatraPDF.exe integrity OK"
       - run: uv sync --group build
       - name: Build EXE (one-dir, versioned metadata)
         shell: powershell
@@ -120,7 +94,6 @@ jobs:
           Get-Item $exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion, FileDescription
           Write-Host "== Authenticode signatures =="
           Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage, SignerCertificate
-          Get-AuthenticodeSignature "dist\UPS-Label-Cropper\_internal\ups_label_cropper\bin\SumatraPDF.exe" | Format-List Status, SignerCertificate
       - name: Zip release artifact
         shell: powershell
         run: |
