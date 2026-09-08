@@ -76,6 +76,12 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      # Not implied by contents:write -- once a workflow declares a top-level
+      # `permissions` map, every scope it omits becomes `none`. upload-artifact
+      # authenticates via the runner's runtime token (so uploads work without
+      # this), but actions:write is required for artifact REST/download API
+      # access, so declaring it keeps things explicit.
+      actions: write
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
@@ -130,11 +136,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       # ...everything else (PRs, manual runs) publishes it as a workflow
-      # artifact so the EXE can be tested without cutting a release.
+      # artifact so the EXE can be tested without cutting a release. Artifacts
+      # appear in the "Artifacts" box on the run *summary* page (left column,
+      # below the job list) and require being signed in to GitHub to download.
+      # The run number is in the name so consecutive test builds are
+      # distinguishable in that list.
       - name: Upload Build Artifact
         if: ${{ needs.release-please.outputs.release_created != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: UPS-Label-Cropper-windows-x64
+          name: UPS-Label-Cropper-windows-x64-build${{ github.run_number }}
           path: UPS-Label-Cropper-windows-x64.zip
           if-no-files-found: error
+          retention-days: 14
