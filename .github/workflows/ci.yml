@@ -79,19 +79,85 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync --group build
-      - name: Build EXE (one-dir, versioned metadata)
+      - name: Resolve build version
+        # Single source of truth for the EXE VERSIONINFO *and* the installer:
+        # release tag when release-please cut one, else the pyproject.toml
+        # version. Written to $GITHUB_ENV so every later step (PyInstaller,
+        # ISCC, artifact names) sees the same value. Mirrors the "strip
+        # leading v" behaviour of build/version_info.py.
         shell: powershell
         env:
           UPS_LABEL_CROPPER_VERSION: ${{ needs.release-please.outputs.tag_name }}
         run: |
+          $v = $env:UPS_LABEL_CROPPER_VERSION
+          if ([string]::IsNullOrWhiteSpace($v)) {
+            $m = Select-String -Path pyproject.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1
+            $v = if ($m) { $m.Matches[0].Groups[1].Value } else { "0.0.0" }
+          }
+          $v = $v.TrimStart('v')
+          # -Encoding ascii on purpose: Windows PowerShell 5.1's "utf8" writes
+          # a BOM that corrupts the first GITHUB_ENV key. Values are ASCII.
+          "UPS_LABEL_CROPPER_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+          "INSTALLER_NAME=UPS-Label-Cropper-Setup-$v-windows-x64.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+          Write-Host "Build version: $v"
+      - run: uv sync --group build
+      - name: Build EXE (one-dir, versioned metadata)
+        shell: powershell
+        run: |
           uv run pyinstaller --clean --noconfirm UPS-Label-Cropper.spec
+      - name: Install Inno Setup (pinned, hash-verified)
+        # Inno Setup is NOT preinstalled on windows-latest anymore: it was
+        # dropped from the windows-2025 image and GitHub declined to add it
+        # back (actions/runner-images#12464). Pin the exact version and
+        # verify its SHA-256 against jrsoftware's signed .issig file-hash
+        # (https://github.com/jrsoftware/issrc/releases/tag/is-6_7_3) so a
+        # compromised download can never end up compiling a release.
+        # Upgrade deliberately: new version -> new hash -> review.
+        shell: powershell
+        run: |
+          $innoVersion = "6.7.3"
+          $expected = "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732"
+          $exe = "innosetup-$innoVersion.exe"
+          $tag = "is-" + ($innoVersion -replace '\.', '_')
+          $url = "https://github.com/jrsoftware/issrc/releases/download/$tag/$exe"
+          Invoke-WebRequest -Uri $url -OutFile $exe
+          $actual = (Get-FileHash -Algorithm SHA256 $exe).Hash
+          # -ne is case-insensitive; Get-FileHash returns uppercase hex.
+          if ($actual -ne $expected) {
+            Write-Error "Inno Setup SHA-256 mismatch! expected=$expected actual=$actual Refusing to build a release with an unverified compiler."
+            exit 1
+          }
+          Start-Process -FilePath ".\$exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-' -Wait
+          Remove-Item $exe
+      - name: Build installer (Inno Setup)
+        shell: powershell
+        run: |
+          # Resolve ISCC defensively: 6.x installs to "Inno Setup 6" under
+          # Program Files (x86), but older/local installs vary. Fail loudly
+          # rather than silently skipping the installer build.
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup\ISCC.exe",
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            Write-Error "ISCC.exe not found in any known Inno Setup location."
+            exit 1
+          }
+          Write-Host "Using ISCC: $iscc"
+          & $iscc "installer\ups-label-cropper.iss"
+          if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed with exit code $LASTEXITCODE"; exit $LASTEXITCODE }
+          Get-Item "dist\$env:INSTALLER_NAME" | Select-Object Name, Length
+          Get-FileHash -Algorithm SHA256 "dist\$env:INSTALLER_NAME"
       - name: Log build provenance
         shell: powershell
         run: |
           $exe = "dist\UPS-Label-Cropper\UPS-Label-Cropper.exe"
           Write-Host "== EXE version metadata =="
           Get-Item $exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion, FileDescription
+          Write-Host "== Installer version metadata =="
+          Get-Item "dist\$env:INSTALLER_NAME" | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion, FileDescription
           Write-Host "== Authenticode signatures =="
           Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage, SignerCertificate
       - name: Zip release artifact
@@ -99,26 +165,31 @@ jobs:
         run: |
           Compress-Archive -Path "dist\UPS-Label-Cropper" -DestinationPath "UPS-Label-Cropper-windows-x64.zip"
           Get-FileHash -Algorithm SHA256 "UPS-Label-Cropper-windows-x64.zip"
-      # Release builds attach the ZIP to the GitHub release...
+      # Release builds attach the installer (primary asset) plus the portable
+      # ZIP to the GitHub release...
       - name: Upload Release Artifact
         if: ${{ needs.release-please.outputs.release_created == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: UPS-Label-Cropper-windows-x64.zip
+          files: |
+            dist/${{ env.INSTALLER_NAME }}
+            UPS-Label-Cropper-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      # ...everything else (PRs, manual runs) publishes it as a workflow
-      # artifact so the EXE can be tested without cutting a release. Artifacts
-      # appear in the "Artifacts" box on the run *summary* page (left column,
-      # below the job list) and require being signed in to GitHub to download.
-      # The run number is in the name so consecutive test builds are
-      # distinguishable in that list.
+      # ...everything else (PRs, manual runs) publishes both the installer and
+      # the ZIP as workflow artifacts so either can be tested without cutting a
+      # release. Artifacts appear in the "Artifacts" box on the run *summary*
+      # page (left column, below the job list) and require being signed in to
+      # GitHub to download. The run number is in the name so consecutive test
+      # builds are distinguishable in that list.
       - name: Upload Build Artifact
         if: ${{ needs.release-please.outputs.release_created != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: UPS-Label-Cropper-windows-x64-build${{ github.run_number }}
-          path: UPS-Label-Cropper-windows-x64.zip
+          path: |
+            UPS-Label-Cropper-windows-x64.zip
+            dist/${{ env.INSTALLER_NAME }}
           if-no-files-found: error
           retention-days: 14

@@ -14,7 +14,7 @@ Auto-rotates and scales UPS shipping labels for thermal printer printing.
 - **Watch mode** — monitors a folder and auto-processes new PDFs with system tray control
 - **Auto-printing** — sends cropped labels directly to a thermal printer
 - **Archive original files** after successful printing
-- **No Python required** — download the ZIP, extract, and run the `.exe`
+- **No Python required** — download the Setup `.exe` and run it
 
 ## Target Dimensions
 
@@ -32,16 +32,22 @@ These dimensions match standard thermal label printer sizes (4" × 6" shipping l
 
 ### For Windows Users
 
-1. Go to the [**Releases** page](https://github.com/twilsonco/UPS-Label-Cropper/releases) and download the latest `UPS-Label-Cropper-windows-x64.zip`
-2. **Extract the ZIP to a permanent folder** (right-click → **Extract All…**). Don't run the app from inside the ZIP, and don't extract it to a temp folder — running from a temp location can trigger the same security warnings this packaging avoids
-3. Run `UPS-Label-Cropper\UPS-Label-Cropper.exe`
+1. Go to the [**Releases** page](https://github.com/twilsonco/UPS-Label-Cropper/releases) and download the latest `UPS-Label-Cropper-Setup-<version>-windows-x64.exe`
+2. Run the Setup `.exe` and follow the prompts — it installs to your Programs folder and creates a **Start Menu entry** ("UPS Label Cropper")
+3. Launch it from the Start Menu
 4. The program will start in watch mode and present you with settings on first run
+
+> Prefer a portable install? The `UPS-Label-Cropper-windows-x64.zip` asset is
+> the same app with no installer: **extract it to a permanent folder**
+> (right-click → **Extract All…**), don't run it from inside the ZIP or a temp
+> folder, and launch `UPS-Label-Cropper\UPS-Label-Cropper.exe`.
 
 ### Windows Security Warnings
 
-Because the executable is **not code-signed**, you may see a Windows security
-prompt the first time you run it (SmartScreen "unknown publisher"). This is a
-reputation warning, not a virus detection:
+Because neither the app nor the installer is **code-signed**, you may see a
+Windows security prompt the first time you run it (SmartScreen "unknown
+publisher" — this applies to the Setup `.exe` too). This is a reputation
+warning, not a virus detection:
 
 - Click **More info** → **Run anyway** to proceed
 - The app is built from the public source in this repository and does not

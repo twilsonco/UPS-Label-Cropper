@@ -210,6 +210,33 @@ To verify the version metadata landed in the EXE:
 Get-Item .\dist\UPS-Label-Cropper\UPS-Label-Cropper.exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion
 ```
 
+### Build the Installer with Inno Setup
+
+The single-file installer is built from **`installer/ups-label-cropper.iss`**
+(Inno Setup 6, **6.3+** required for `ArchitecturesInstallIn64BitMode=x64compatible`).
+Run it *after* the PyInstaller build — the script packages
+`dist/UPS-Label-Cropper/`:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\ups-label-cropper.iss
+```
+
+Output: `dist/UPS-Label-Cropper-Setup-<version>-windows-x64.exe`. The version
+comes from `UPS_LABEL_CROPPER_VERSION` (CI sets it from the release tag),
+falling back to `pyproject.toml`.
+
+Two things never to change casually:
+
+- **`AppId`** is a hardcoded GUID. Regenerating it breaks upgrade-in-place and
+  leaves orphaned Add/Remove Programs entries.
+- **The uninstaller never deletes `%APPDATA%\UPS-Label-Cropper\`** (the user's
+  config and log live there); it *does* remove the `UPSLabelCropper` autostart
+  Run key so a removed app can't leave a dangling entry.
+
+Inno Setup is **not** preinstalled on `windows-latest` (GitHub dropped it from
+the `windows-2025` image), so CI installs a pinned, SHA-256-verified copy —
+see the "Install Inno Setup" step in `.github/workflows/ci.yml`.
+
 ### Automated Build via CI
 
 The CI pipeline (see `.github/workflows/ci.yml`) builds and publishes on release:
@@ -217,8 +244,11 @@ The CI pipeline (see `.github/workflows/ci.yml`) builds and publishes on release
 1. Tests run first (`pytest`).
 2. On a release, the spec build runs with `UPS_LABEL_CROPPER_VERSION` set to the
    release tag, then logs the EXE's version metadata and Authenticode status.
-3. `dist/UPS-Label-Cropper/` is zipped to `UPS-Label-Cropper-windows-x64.zip`
-   and uploaded as the release asset.
+3. `installer/ups-label-cropper.iss` is compiled with a pinned Inno Setup into
+   `dist/UPS-Label-Cropper-Setup-<version>-windows-x64.exe`.
+4. The installer is uploaded as the **primary release asset**, alongside
+   `UPS-Label-Cropper-windows-x64.zip` (the portable build). PRs and manual
+   runs publish both as workflow artifacts instead.
 
 ### Reducing Antivirus False Positives
 
@@ -260,6 +290,9 @@ uv run pytest tests/test_crop.py -v
 UPS-Label-Cropper.spec   # PyInstaller build definition (one-dir, versioned)
 build/
 └── version_info.py      # Generates the EXE VERSIONINFO resource at build time
+
+installer/
+└── ups-label-cropper.iss # Inno Setup 6 installer script
 
 src/ups_label_cropper/
 ├── __init__.py      # Public API re-exports
@@ -320,7 +353,7 @@ When a new `.pdf` file appears in `watched_directory`:
 New PDF detected
   → Validate with PyMuPDF (skip if invalid)
   → Crop using process_label() → temp file
-  → Print cropped PDF via Windows Print API to configured printer
+  → Print cropped PDF via native Windows GDI to configured printer
     → On failure: log error, leave source file untouched, skip archive
     → On success:
       → Move original PDF → {watched_directory}/{processed_folder}/
