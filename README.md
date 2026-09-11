@@ -36,10 +36,7 @@ These dimensions match standard thermal label printer sizes (4" × 6" shipping l
 2. Run the Setup `.exe` and follow the prompts — it installs to your Programs folder and creates a **Start Menu entry** ("UPS Label Cropper")
 3. Launch it from the Start Menu
 4. The program will start in watch mode and present you with settings on first run
-
-> The Setup `.exe` is the only published build file: it contains the full app
-> (no separate download needed) and can be uninstalled normally via **Settings
-> → Apps**.
+5. *Uninstall the app normally via **Settings → Apps***.
 
 ### Windows Security Warnings
 
