@@ -201,8 +201,8 @@ produces a **one-folder** bundle, not a single `.exe`. This is deliberate:
    uv run pyinstaller --clean --noconfirm UPS-Label-Cropper.spec
    ```
 3. The bundle is in `dist/UPS-Label-Cropper/` — the EXE plus its `_internal/`
-   folder. Zip the whole folder to distribute; users extract and run the `.exe`
-   inside it.
+   folder. For anything you hand to users, compile it into the installer
+   (next section) — that is the only file CI publishes.
 
 To verify the version metadata landed in the EXE:
 
@@ -246,9 +246,9 @@ The CI pipeline (see `.github/workflows/ci.yml`) builds and publishes on release
    release tag, then logs the EXE's version metadata and Authenticode status.
 3. `installer/ups-label-cropper.iss` is compiled with a pinned Inno Setup into
    `dist/UPS-Label-Cropper-Setup-<version>-windows-x64.exe`.
-4. The installer is uploaded as the **primary release asset**, alongside
-   `UPS-Label-Cropper-windows-x64.zip` (the portable build). PRs and manual
-   runs publish both as workflow artifacts instead.
+4. The installer is uploaded as the **only release asset** — the one-dir tree
+   it contains supersedes the old portable ZIP, which is no longer published.
+   PRs and manual runs publish it as a workflow artifact instead.
 
 ### Reducing Antivirus False Positives
 

@@ -37,10 +37,9 @@ These dimensions match standard thermal label printer sizes (4" × 6" shipping l
 3. Launch it from the Start Menu
 4. The program will start in watch mode and present you with settings on first run
 
-> Prefer a portable install? The `UPS-Label-Cropper-windows-x64.zip` asset is
-> the same app with no installer: **extract it to a permanent folder**
-> (right-click → **Extract All…**), don't run it from inside the ZIP or a temp
-> folder, and launch `UPS-Label-Cropper\UPS-Label-Cropper.exe`.
+> The Setup `.exe` is the only published build file: it contains the full app
+> (no separate download needed) and can be uninstalled normally via **Settings
+> → Apps**.
 
 ### Windows Security Warnings
 

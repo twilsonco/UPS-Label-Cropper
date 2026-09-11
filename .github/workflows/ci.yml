@@ -160,36 +160,29 @@ jobs:
           Get-Item "dist\$env:INSTALLER_NAME" | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion, FileDescription
           Write-Host "== Authenticode signatures =="
           Get-AuthenticodeSignature $exe | Format-List Status, StatusMessage, SignerCertificate
-      - name: Zip release artifact
-        shell: powershell
-        run: |
-          Compress-Archive -Path "dist\UPS-Label-Cropper" -DestinationPath "UPS-Label-Cropper-windows-x64.zip"
-          Get-FileHash -Algorithm SHA256 "UPS-Label-Cropper-windows-x64.zip"
-      # Release builds attach the installer (primary asset) plus the portable
-      # ZIP to the GitHub release...
+      # The single-file installer is the ONLY published file, for both GitHub
+      # releases and PR/manual workflow runs: it ships the same one-dir tree
+      # the old portable ZIP contained, and publishing one file removes the
+      # "which of the two do I run?" confusion.
       - name: Upload Release Artifact
         if: ${{ needs.release-please.outputs.release_created == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: |
-            dist/${{ env.INSTALLER_NAME }}
-            UPS-Label-Cropper-windows-x64.zip
+          files: dist/${{ env.INSTALLER_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      # ...everything else (PRs, manual runs) publishes both the installer and
-      # the ZIP as workflow artifacts so either can be tested without cutting a
-      # release. Artifacts appear in the "Artifacts" box on the run *summary*
-      # page (left column, below the job list) and require being signed in to
+      # ...everything else (PRs, manual runs) publishes the installer as a
+      # workflow artifact so it can be tested without cutting a release.
+      # Artifacts appear in the "Artifacts" box on the run *summary* page
+      # (left column, below the job list) and require being signed in to
       # GitHub to download. The run number is in the name so consecutive test
       # builds are distinguishable in that list.
       - name: Upload Build Artifact
         if: ${{ needs.release-please.outputs.release_created != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: UPS-Label-Cropper-windows-x64-build${{ github.run_number }}
-          path: |
-            UPS-Label-Cropper-windows-x64.zip
-            dist/${{ env.INSTALLER_NAME }}
+          name: UPS-Label-Cropper-installer-windows-x64-build${{ github.run_number }}
+          path: dist/${{ env.INSTALLER_NAME }}
           if-no-files-found: error
           retention-days: 14
