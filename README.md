@@ -125,6 +125,22 @@ Settings are managed through the first-run wizard or by editing the config file:
 
 ---
 
+## Testing Multi-Label Support
+
+A sample multi-box shipment PDF is included at `demo/download.pdf` (two labels per page on some pages, a single label on the last). To verify multi-label handling from source:
+
+```bash
+# From the repository root (requires uv — see docs/README_DEV.md)
+mkdir -p demo_out
+uv run python -m ups_label_cropper.crop demo/download.pdf demo_out/download.pdf
+```
+
+Expected result: the output PDF contains **one page per detected label** — the sample produces 5 label pages (2 + 2 + 1), each exactly 100mm × 150mm (283.5pt × 425.2pt), rotated upright and centered. Halves of a page without a label are skipped automatically.
+
+You can open `demo_out/download.pdf` in any PDF viewer to confirm each label fills its own page.
+
+---
+
 ## Developers
 
 If you want to run this from source, set up the development environment, build the executable, or contribute, see [**docs/README_DEV.md**](docs/README_DEV.md) for:

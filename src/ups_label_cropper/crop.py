@@ -118,11 +118,33 @@ def detect_label_bbox(page, clip):
     return union
 
 
+def _trim_white_border(img, threshold=250):
+    """Crop near-white margins around the printed content of a label bitmap.
+
+    UPS label images often embed white padding inside their bounding box;
+    without trimming, scaling to the bbox leaves visible white gutters and
+    the printed content ends up smaller than the printable area. Pixels
+    lighter than ``threshold`` are treated as background.
+    """
+    gray = img.convert("L")
+    mask = gray.point(lambda value: 255 if value < threshold else 0)
+    bbox = mask.getbbox()
+    if bbox is None:
+        return img  # entirely blank; nothing sensible to trim
+    trimmed = img.crop(bbox)
+    if trimmed.width < 10 or trimmed.height < 10:
+        # Degenerate result (stray dark pixels); keep the original capture.
+        return img
+    return trimmed
+
+
 def _render_label_to_page(src_page, label_bbox, out_doc):
     """Render one detected label onto a new 4x6in page in ``out_doc``.
 
-    The label region is captured at high DPI, rotated 90 degrees CCW when
-    sideways (landscape), and centered on the output page with a ~1mm margin.
+    The label region is captured at high DPI, its embedded white padding is
+    trimmed, rotated 90 degrees CCW when sideways (landscape), then scaled to
+    fill the printable area while preserving aspect ratio and centered with a
+    ~1mm margin.
     """
     content_width = label_bbox.width
     content_height = label_bbox.height
@@ -138,23 +160,26 @@ def _render_label_to_page(src_page, label_bbox, out_doc):
         clip=label_bbox,
         alpha=False,
     )
+    img = Image.frombytes("RGB", [src_pix.width, src_pix.height], src_pix.samples)
 
-    out_page = out_doc.new_page(width=TARGET_WIDTH_PT, height=TARGET_HEIGHT_PT)
+    # Trim the white padding embedded in the source image so the visible
+    # label (not its white margin) fills the output page.
+    img = _trim_white_border(img)
 
     if rotate:
         # Rotate the captured bitmap 90 degrees CCW with Pillow and embed it
         # upright; this keeps placement math simple and exact.
-        img = Image.frombytes("RGB", [src_pix.width, src_pix.height], src_pix.samples)
         img = img.transpose(Image.ROTATE_90)
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        stream = buf.getvalue()
 
-        # After rotation the content occupies (height x width) points.
-        place_w, place_h = content_height, content_width
-    else:
-        stream = None
-        place_w, place_h = content_width, content_height
+    # Trimmed (and possibly rotated) content size back in points.
+    place_w = img.width / capture_scale
+    place_h = img.height / capture_scale
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    stream = buf.getvalue()
+
+    out_page = out_doc.new_page(width=TARGET_WIDTH_PT, height=TARGET_HEIGHT_PT)
 
     # Scale to fit the target with a ~1mm margin on all sides, centered.
     MARGIN_PT = 3.0
@@ -168,14 +193,12 @@ def _render_label_to_page(src_page, label_bbox, out_doc):
     offset_y = (TARGET_HEIGHT_PT - final_h) / 2
 
     rect = fitz.Rect(offset_x, offset_y, offset_x + final_w, offset_y + final_h)
-    if stream is not None:
-        out_page.insert_image(rect, stream=stream)
-    else:
-        out_page.insert_image(rect, pixmap=src_pix)
+    out_page.insert_image(rect, stream=stream)
 
     orientation = "landscape (rotated 90° CCW)" if rotate else "portrait"
     logger.info(
-        f"    Label {content_width:.1f}x{content_height:.1f}pt -> "
+        f"    Label {content_width:.1f}x{content_height:.1f}pt "
+        f"(trimmed {place_w:.1f}x{place_h:.1f}pt) -> "
         f"{orientation}, {capture_dpi} DPI, {final_w:.0f}x{final_h:.0f}pt"
     )
 
