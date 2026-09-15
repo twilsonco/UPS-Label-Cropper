@@ -198,6 +198,43 @@ class TestPrintPdfFlow:
         dc.DeleteDC.assert_called_once()
         dc.EndDoc.assert_not_called()
 
+    def test_startpage_failure_aborts_job(self, tmp_path, win32):
+        """StartPage failing after StartDoc must abort the spooler job."""
+        path = _make_pdf(tmp_path, pages=2)
+        win32.dc.StartPage.side_effect = RuntimeError("startpage failed")
+
+        with pytest.raises(RuntimeError):
+            gdi_print.print_pdf(path)
+
+        dc = win32.dc
+        dc.AbortDoc.assert_called_once()
+        dc.EndPage.assert_not_called()
+        dc.EndDoc.assert_not_called()
+        dc.DeleteDC.assert_called_once()
+
+    def test_endpage_failure_aborts_job(self, tmp_path, win32):
+        """EndPage failing after StartDoc must abort, not leave a partial job."""
+        path = _make_pdf(tmp_path, pages=2)
+        win32.dc.EndPage.side_effect = RuntimeError("endpage failed")
+
+        with pytest.raises(RuntimeError):
+            gdi_print.print_pdf(path)
+
+        dc = win32.dc
+        dc.AbortDoc.assert_called_once()
+        dc.EndDoc.assert_not_called()
+        dc.DeleteDC.assert_called_once()
+
+    def test_enddoc_failure_also_aborts(self, tmp_path, win32):
+        """A failing EndDoc (after all pages) still aborts exactly once."""
+        path = _make_pdf(tmp_path, pages=1)
+        win32.dc.EndDoc.side_effect = RuntimeError("spooler died")
+
+        with pytest.raises(RuntimeError):
+            gdi_print.print_pdf(path)
+
+        win32.dc.AbortDoc.assert_called_once()
+
     def test_unknown_printer_raises_and_no_dc_created(self, tmp_path, win32):
         path = _make_pdf(tmp_path, pages=1)
 
@@ -283,7 +320,7 @@ class TestPrintPdfFlow:
         hdc, dx, dy, dw, dh, sx, sy, sw, sh = args[:9]
         assert hdc == 0x1234
         assert (sx, sy) == (0, 0)
-        assert (sw, sh) == (dw, dh) or dw <= sw  # fit, never upscale
+        assert dw <= sw and dh <= sh  # fit, never upscale
         assert dw <= 800 and dh <= 1200  # inside HORZRES x VERTRES
         assert dx == (800 - dw) // 2  # centred, zero offsets
         assert dy == (1200 - dh) // 2

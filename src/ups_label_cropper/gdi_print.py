@@ -178,11 +178,16 @@ def _blit_dib(
     gdi32 = _get_gdi32()
     src_w = bmi.bmiHeader.biWidth
     src_h = -bmi.bmiHeader.biHeight  # stored negative (top-down)
+    # lpBits is declared c_void_p: hand it an explicit mutable buffer sized
+    # exactly to len(bits) (create_string_buffer would otherwise append a
+    # NUL). The buffer owns the pixel data for the whole GDI call, so the
+    # pointer cannot dangle or be rejected by ctypes.
+    bits_buffer = ctypes.create_string_buffer(bits, len(bits))
     drawn = gdi32.StretchDIBits(
         hdc,
         x, y, width, height,
         0, 0, src_w, src_h,
-        bits,
+        bits_buffer,
         bmi,  # ctypes passes the address automatically for a POINTER argtype
         _DIB_RGB_COLORS,
         _SRCCOPY,
@@ -243,22 +248,26 @@ def print_pdf(pdf_path: Path, printer_name: str | None = None) -> bool:
             hdc = dc.GetSafeHdc()
 
             dc.StartDoc(DOC_NAME)
-            for page_index in range(doc.page_count):
-                page = doc.load_page(page_index)
-                bits, img_w, img_h = _render_page_to_dib(page, dpi_x, dpi_y)
-                dx, dy, dw, dh = _fit_dest_rect(img_w, img_h, horz_res, vert_res, offset_x, offset_y)
-                bmi = _build_bitmapinfo(img_w, img_h, len(bits))
+            # One try/except for the whole job: any failure after StartDoc --
+            # render, fit, StartPage, the blit, or EndPage -- aborts the
+            # spooler job exactly once, and EndDoc runs only after every
+            # page completed (a failed EndDoc aborts too).
+            try:
+                for page_index in range(doc.page_count):
+                    page = doc.load_page(page_index)
+                    bits, img_w, img_h = _render_page_to_dib(page, dpi_x, dpi_y)
+                    dx, dy, dw, dh = _fit_dest_rect(img_w, img_h, horz_res, vert_res, offset_x, offset_y)
+                    bmi = _build_bitmapinfo(img_w, img_h, len(bits))
 
-                dc.StartPage()
-                try:
+                    dc.StartPage()
                     win32gui.SetStretchBltMode(hdc, win32con.HALFTONE)
                     dc.SetBrushOrg((0, 0))
                     _blit_dib(hdc, dx, dy, dw, dh, bits, bmi)
-                except BaseException:
-                    dc.AbortDoc()
-                    raise
-                dc.EndPage()
-            dc.EndDoc()
+                    dc.EndPage()
+                dc.EndDoc()
+            except BaseException:
+                dc.AbortDoc()
+                raise
         finally:
             dc.DeleteDC()
 
