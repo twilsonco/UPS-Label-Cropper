@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.5.0...v1.6.0) (2026-09-15)
+
+
+### Features
+
+* remove sumatraPDF and ship installer ([#13](https://github.com/twilsonco/UPS-Label-Cropper/issues/13)) ([2b47289](https://github.com/twilsonco/UPS-Label-Cropper/commit/2b472895c4c733044fdc8753c114d144ca7f0351))
+
 ## [1.5.0](https://github.com/twilsonco/UPS-Label-Cropper/compare/v1.4.0...v1.5.0) (2026-09-02)
 
 
