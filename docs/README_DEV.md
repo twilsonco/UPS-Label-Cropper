@@ -1,6 +1,6 @@
 # UPS Label Cropper — Developer Guide
 
-This guide covers setting up the development environment, running from source, building the Windows executable, and running tests.
+This guide covers setting up the development environment, running from source, building the Windows installer (PyInstaller bundle + Inno Setup), and running tests.
 
 ## Table of Contents
 
@@ -9,7 +9,7 @@ This guide covers setting up the development environment, running from source, b
 - [Running from Source](#running-from-source)
 - [Configuration](#configuration)
 - [Windows Startup Registration](#windows-startup-registration)
-- [Building the Windows EXE](#building-the-windows-exe)
+- [Building the Windows Installer](#building-the-windows-installer)
 - [Running Tests](#running-tests)
 - [Project Structure](#project-structure)
 - [How It Works](#how-it-works)
@@ -20,7 +20,8 @@ This guide covers setting up the development environment, running from source, b
 
 - **Python 3.10+** — [Download from python.org](https://www.python.org/downloads/)
 - **uv** package manager — [Installation guide](https://github.com/astral-sh/uv)
-- On Windows: a PDF-capable printer installed (or specify by name in config)
+- On Windows: a printer with a normal Windows driver installed (printing uses native
+  GDI via `pywin32`/`gdi32` — no third-party PDF viewer is needed or bundled)
 - Git (for cloning the repository)
 
 ---
@@ -92,7 +93,10 @@ Run in background with a system tray icon. Monitors a configured directory for n
 uv run python -m ups_label_cropper.__main__
 ```
 
-This defaults to watch mode. A system tray icon will appear. Right-click it to see status, pause/resume watching, open the config folder, or exit.
+This defaults to watch mode. A system tray icon will appear. Right-click it for **Settings**
+(tkinter dialog: watch directory, printer, processed folder, poll interval, autostart) or
+**Show Logs**; the built-in **Quit** item exits. The icon's hover text shows the current state.
+Double-click opens Settings.
 
 ### Python API
 
@@ -130,6 +134,7 @@ A default config is created automatically on first run if one doesn't exist.
 | `printer_name` | string or null | `null` (system default) | Exact name of printer to use; `null` uses OS default |
 | `processed_folder` | string | `"processed"` | Subfolder within watched dir to archive source files after success |
 | `poll_interval_seconds` | float | `1.0` | How often to check the directory |
+| `start_with_computer` | bool | `false` | Windows autostart; toggled by the Settings dialog, which also writes/clears the `HKCU\...\Run` key via `autostart.py` |
 
 ### Example Config
 
@@ -142,11 +147,16 @@ A default config is created automatically on first run if one doesn't exist.
 }
 ```
 
-To edit the config, either open the JSON file directly or right-click the system tray icon and choose **Open Config Folder**.
+To edit the config, either open the JSON file directly or right-click the system tray icon and choose **Settings**.
 
 ---
 
 ## Windows Startup Registration
+
+> **Installed users don't need any of this** — the Settings dialog has a
+> "Start when computer boots" checkbox that writes the `HKCU\...\Run` key
+> itself (see `autostart.py`), and the uninstaller cleans the key up. The
+> options below are for **running from source**.
 
 To start watch mode automatically when you log into Windows:
 
@@ -174,33 +184,97 @@ Task Scheduler handles systems that boot before Python is ready:
 
 ---
 
-## Building the Windows EXE
+## Building the Windows Installer
+
+End users should always receive the **Setup installer** — never the bare EXE.
+Building it is two steps: a PyInstaller one-dir bundle, then an Inno Setup
+installer that packages it.
+
+### Step 1: PyInstaller bundle
+
+The bundle is defined in **`UPS-Label-Cropper.spec`** (PyInstaller spec file) and
+produces a **one-folder** bundle, not a single `.exe`. This is deliberate:
+
+- **One-folder, not one-file.** One-file EXEs self-extract to `%TEMP%\_MEIxxxxxx`
+  and run from there, which Windows Defender's machine-learning heuristics flag
+  as `Trojan:Win32/Wacatac.B!ml`. One-folder avoids that entirely.
+- **Native GDI printing.** Printing uses `pywin32` + `gdi32` directly
+  (`src/ups_label_cropper/gdi_print.py`) — no third-party PDF viewer binary
+  ships in the bundle.
+- **Version metadata.** `build/version_info.py` generates a VERSIONINFO resource
+  so the EXE carries a real CompanyName/ProductVersion (unsigned binaries with
+  blank metadata are flagged hardest). The version comes from the
+  `UPS_LABEL_CROPPER_VERSION` env var (CI sets it from the release tag), falling
+  back to the `pyproject.toml` version.
+- **No UPX.** Compression is disabled in the spec — packed PEs are another AV trigger.
 
 ### Build Locally with PyInstaller
 
-PyInstaller packages the Python application into a standalone `.exe` file that doesn't require Python to be installed.
-
 1. Make sure you have the full development environment set up (see [Workspace Setup](#workspace-setup))
-2. Download the portable version of [SumatraPDF](https://www.sumatrapdfreader.org/download-free-pdf-viewer) and place it in `src/ups_label_cropper/bin`
-3. Run:
+2. Run:
    ```powershell
-   uv pip install pyinstaller
-   uv run pyinstaller --onefile --noconsole `
-     --name "UPS-Label-Cropper" `
-     --add-data "assets;assets" `
-     --add-data "src/ups_label_cropper/bin:ups_label_cropper/bin" `
-     --icon "assets/icon.ico" `
-     src/ups_label_cropper/__main__.py
+   uv sync --group build
+   uv run pyinstaller --clean --noconfirm UPS-Label-Cropper.spec
    ```
-4. The built executable will be in `dist/UPS-Label-Cropper.exe`
+3. The bundle is in `dist/UPS-Label-Cropper/` — the EXE plus its `_internal/`
+   folder. For anything you hand to users, compile it into the installer
+   (next section) — that is the only file CI publishes.
+
+To verify the version metadata landed in the EXE:
+
+```powershell
+Get-Item .\dist\UPS-Label-Cropper\UPS-Label-Cropper.exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion
+```
+
+### Build the installer with Inno Setup (step 2)
+
+The single-file installer is built from **`installer/ups-label-cropper.iss`**
+(Inno Setup 6, **6.3+** required for `ArchitecturesInstallIn64BitMode=x64compatible`).
+Run it *after* the PyInstaller build — the script packages
+`dist/UPS-Label-Cropper/`:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\ups-label-cropper.iss
+```
+
+Output: `dist/UPS-Label-Cropper-Setup-<version>-windows-x64.exe`. The version
+comes from `UPS_LABEL_CROPPER_VERSION` (CI sets it from the release tag),
+falling back to `pyproject.toml`.
+
+Two things never to change casually:
+
+- **`AppId`** is a hardcoded GUID. Regenerating it breaks upgrade-in-place and
+  leaves orphaned Add/Remove Programs entries.
+- **The uninstaller never deletes `%APPDATA%\UPS-Label-Cropper\`** (the user's
+  config and log live there); it *does* remove the `UPSLabelCropper` autostart
+  Run key so a removed app can't leave a dangling entry.
+
+Inno Setup is **not** preinstalled on `windows-latest` (GitHub dropped it from
+the `windows-2025` image), so CI installs a pinned, SHA-256-verified copy —
+see the "Install Inno Setup" step in `.github/workflows/ci.yml`.
 
 ### Automated Build via CI
 
-The CI pipeline (see `.github/workflows/ci.yml`) automatically builds the EXE after tests pass and publishes it as a release artifact. When you push to the main branch or create a pull request:
+The CI pipeline (see `.github/workflows/ci.yml`) builds and publishes on release:
 
-1. Tests run first (`pytest`)
-2. If tests pass, the Windows EXE is built
-3. For releases, the EXE is uploaded as a release asset
+1. Tests run first (`pytest`).
+2. On a release, the spec build runs with `UPS_LABEL_CROPPER_VERSION` set to the
+   release tag, then logs the EXE's version metadata and Authenticode status.
+3. `installer/ups-label-cropper.iss` is compiled with a pinned Inno Setup into
+   `dist/UPS-Label-Cropper-Setup-<version>-windows-x64.exe`.
+4. The installer is uploaded as the **only release asset** — the one-dir tree
+   it contains supersedes the old portable ZIP, which is no longer published.
+   PRs and manual runs publish it as a workflow artifact instead.
+
+### Reducing Antivirus False Positives
+
+The unsigned build may still trigger SmartScreen "unknown publisher" warnings
+(a *reputation* issue, distinct from the `Wacatac.B!ml` heuristic). Mitigations
+in place: one-folder layout, version metadata, no UPX, and no runtime
+unpack-and-execute behaviour. If a specific release is falsely flagged, submit
+the exact file at <https://www.microsoft.com/en-us/wdsi/filesubmission>
+(per-hash; a rebuild changes the hash). The permanent fix is an Authenticode
+signature (e.g. Azure Trusted Signing or an OV cert), not yet configured.
 
 ---
 
@@ -229,19 +303,27 @@ uv run pytest tests/test_crop.py -v
 ## Project Structure
 
 ```
+UPS-Label-Cropper.spec   # PyInstaller build definition (one-dir, versioned)
+build/
+└── version_info.py      # Generates the EXE VERSIONINFO resource at build time
+
+installer/
+└── ups-label-cropper.iss # Inno Setup 6 installer script
+
 src/ups_label_cropper/
 ├── __init__.py      # Public API re-exports
 ├── __main__.py      # CLI entry point (watch mode by default)
 ├── crop.py          # Core cropping logic (PyMuPDF-based)
 ├── config.py        # JSON config read/write with dataclass interface
-├── printer.py       # Windows Print API via win32api.ShellExecute
+├── printer.py       # Thin platform façade for print_pdf()
+├── gdi_print.py     # Native Windows GDI printing (pywin32 + gdi32)
 ├── watcher.py       # watchdog Observer + label processing pipeline
-├── tray.py          # pystray system tray icon and menu
-└── bin/             # Supporting binaries (if any)
+└── tray.py          # infi.systray system tray icon and menu
 
 tests/
 ├── __init__.py
-└── test_crop.py     # Unit tests for crop.py
+├── test_crop.py                  # Unit tests for crop.py
+└── test_gdi_print.py             # Mocked GDI printing tests
 
 docs/
 └── README_DEV.md    # This file
@@ -284,23 +366,22 @@ single-label and multi-label PDFs:
 When a new `.pdf` file appears in `watched_directory`:
 
 ```
-New PDF detected
+New PDF detected (1 s debounce; wait for the writer to release the file)
   → Validate with PyMuPDF (skip if invalid)
-  → Crop using process_label() → temp file
-  → Print cropped PDF via Windows Print API to configured printer
+  → Crop using process_label() → {processed_folder}/<name>_processed.pdf
+  → Print cropped PDF via native Windows GDI to configured printer
     → On failure: log error, leave source file untouched, skip archive
     → On success:
       → Move original PDF → {watched_directory}/{processed_folder}/
-      → Delete temp cropped file
+      → Keep the cropped _processed PDF alongside it as a print record
 ```
 
 ### System Tray Menu
 
-Right-click the tray icon for:
+The icon's **hover text** shows the current state (Watching <dir> / Paused). Right-click for:
 
 | Menu Item | Behavior |
 |-----------|----------|
-| **Status: Watching ...** | Disabled label showing current state (Watching / Paused / Idle) |
-| **Pause / Resume** | Toggles directory monitoring on/off without exiting |
-| **Open Config Folder** | Opens the folder containing `config.json` in Explorer/Finder |
-| **Exit** | Stops watcher and closes tray icon |
+| **Settings** | tkinter dialog: watch directory, printer name, processed folder, poll interval, autostart checkbox |
+| **Show Logs** | Opens `cropper.log` (next to `config.json`) in Notepad |
+| **Quit** | Stops the watcher and closes the tray icon (auto-added by `infi.systray`) |

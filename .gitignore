@@ -7,6 +7,10 @@ __pycache__/
 
 demo
 
+# PyInstaller output (onedir build + workpath)
+dist/
+build/UPS-Label-Cropper/
+
 # os metadata
 .DS_Store
 Thumbs.db

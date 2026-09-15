@@ -6,7 +6,13 @@ def is_windows() -> bool:
 
 
 def set_autostart_enabled(exe_path: str) -> None:
-    """Add registry entry for current user Run key."""
+    """Add registry entry for current user Run key.
+
+    Note: writing the HKCU ...\\Run key is a persistence mechanism that
+    antivirus heuristics watch closely. Here it is intentional, opt-in via the
+    Settings dialog, and (with one-dir builds) points at a stable on-disk EXE
+    path rather than a temp extraction. Do not call this without a user action.
+    """
     if not is_windows():
         return
     import winreg

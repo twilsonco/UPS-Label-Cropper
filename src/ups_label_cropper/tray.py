@@ -266,9 +266,16 @@ def _on_quit(systray):
 
 
 def _get_base_path() -> Path:
-    """Get the base path for bundled resources (works in dev and PyInstaller exe)."""
-    if getattr(sys, '_MEIPASS', None):
-        return Path(sys._MEIPASS)
+    """Get the base path for bundled resources (works in dev and PyInstaller).
+
+    One-dir frozen builds put datas under ``<app dir>/_internal``. The
+    ``sys._MEIPASS`` branch is kept only for legacy one-file builds.
+    """
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "_internal"
     return Path(__file__).parent.parent.parent
 
 
