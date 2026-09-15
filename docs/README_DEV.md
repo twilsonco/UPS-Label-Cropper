@@ -1,6 +1,6 @@
 # UPS Label Cropper — Developer Guide
 
-This guide covers setting up the development environment, running from source, building the Windows executable, and running tests.
+This guide covers setting up the development environment, running from source, building the Windows installer (PyInstaller bundle + Inno Setup), and running tests.
 
 ## Table of Contents
 
@@ -9,7 +9,7 @@ This guide covers setting up the development environment, running from source, b
 - [Running from Source](#running-from-source)
 - [Configuration](#configuration)
 - [Windows Startup Registration](#windows-startup-registration)
-- [Building the Windows EXE](#building-the-windows-exe)
+- [Building the Windows Installer](#building-the-windows-installer)
 - [Running Tests](#running-tests)
 - [Project Structure](#project-structure)
 - [How It Works](#how-it-works)
@@ -20,7 +20,8 @@ This guide covers setting up the development environment, running from source, b
 
 - **Python 3.10+** — [Download from python.org](https://www.python.org/downloads/)
 - **uv** package manager — [Installation guide](https://github.com/astral-sh/uv)
-- On Windows: a PDF-capable printer installed (or specify by name in config)
+- On Windows: a printer with a normal Windows driver installed (printing uses native
+  GDI via `pywin32`/`gdi32` — no third-party PDF viewer is needed or bundled)
 - Git (for cloning the repository)
 
 ---
@@ -92,7 +93,10 @@ Run in background with a system tray icon. Monitors a configured directory for n
 uv run python -m ups_label_cropper.__main__
 ```
 
-This defaults to watch mode. A system tray icon will appear. Right-click it to see status, pause/resume watching, open the config folder, or exit.
+This defaults to watch mode. A system tray icon will appear. Right-click it for **Settings**
+(tkinter dialog: watch directory, printer, processed folder, poll interval, autostart) or
+**Show Logs**; the built-in **Quit** item exits. The icon's hover text shows the current state.
+Double-click opens Settings.
 
 ### Python API
 
@@ -130,6 +134,7 @@ A default config is created automatically on first run if one doesn't exist.
 | `printer_name` | string or null | `null` (system default) | Exact name of printer to use; `null` uses OS default |
 | `processed_folder` | string | `"processed"` | Subfolder within watched dir to archive source files after success |
 | `poll_interval_seconds` | float | `1.0` | How often to check the directory |
+| `start_with_computer` | bool | `false` | Windows autostart; toggled by the Settings dialog, which also writes/clears the `HKCU\...\Run` key via `autostart.py` |
 
 ### Example Config
 
@@ -142,11 +147,16 @@ A default config is created automatically on first run if one doesn't exist.
 }
 ```
 
-To edit the config, either open the JSON file directly or right-click the system tray icon and choose **Open Config Folder**.
+To edit the config, either open the JSON file directly or right-click the system tray icon and choose **Settings**.
 
 ---
 
 ## Windows Startup Registration
+
+> **Installed users don't need any of this** — the Settings dialog has a
+> "Start when computer boots" checkbox that writes the `HKCU\...\Run` key
+> itself (see `autostart.py`), and the uninstaller cleans the key up. The
+> options below are for **running from source**.
 
 To start watch mode automatically when you log into Windows:
 
@@ -174,9 +184,15 @@ Task Scheduler handles systems that boot before Python is ready:
 
 ---
 
-## Building the Windows EXE
+## Building the Windows Installer
 
-The build is defined in **`UPS-Label-Cropper.spec`** (PyInstaller spec file) and
+End users should always receive the **Setup installer** — never the bare EXE.
+Building it is two steps: a PyInstaller one-dir bundle, then an Inno Setup
+installer that packages it.
+
+### Step 1: PyInstaller bundle
+
+The bundle is defined in **`UPS-Label-Cropper.spec`** (PyInstaller spec file) and
 produces a **one-folder** bundle, not a single `.exe`. This is deliberate:
 
 - **One-folder, not one-file.** One-file EXEs self-extract to `%TEMP%\_MEIxxxxxx`
@@ -210,7 +226,7 @@ To verify the version metadata landed in the EXE:
 Get-Item .\dist\UPS-Label-Cropper\UPS-Label-Cropper.exe | Select-Object -ExpandProperty VersionInfo | Format-List ProductName, CompanyName, FileVersion
 ```
 
-### Build the Installer with Inno Setup
+### Build the installer with Inno Setup (step 2)
 
 The single-file installer is built from **`installer/ups-label-cropper.iss`**
 (Inno Setup 6, **6.3+** required for `ArchitecturesInstallIn64BitMode=x64compatible`).
@@ -350,23 +366,22 @@ single-label and multi-label PDFs:
 When a new `.pdf` file appears in `watched_directory`:
 
 ```
-New PDF detected
+New PDF detected (1 s debounce; wait for the writer to release the file)
   → Validate with PyMuPDF (skip if invalid)
-  → Crop using process_label() → temp file
+  → Crop using process_label() → {processed_folder}/<name>_processed.pdf
   → Print cropped PDF via native Windows GDI to configured printer
     → On failure: log error, leave source file untouched, skip archive
     → On success:
       → Move original PDF → {watched_directory}/{processed_folder}/
-      → Delete temp cropped file
+      → Keep the cropped _processed PDF alongside it as a print record
 ```
 
 ### System Tray Menu
 
-Right-click the tray icon for:
+The icon's **hover text** shows the current state (Watching <dir> / Paused). Right-click for:
 
 | Menu Item | Behavior |
 |-----------|----------|
-| **Status: Watching ...** | Disabled label showing current state (Watching / Paused / Idle) |
-| **Pause / Resume** | Toggles directory monitoring on/off without exiting |
-| **Open Config Folder** | Opens the folder containing `config.json` in Explorer/Finder |
-| **Exit** | Stops watcher and closes tray icon |
+| **Settings** | tkinter dialog: watch directory, printer name, processed folder, poll interval, autostart checkbox |
+| **Show Logs** | Opens `cropper.log` (next to `config.json`) in Notepad |
+| **Quit** | Stops the watcher and closes the tray icon (auto-added by `infi.systray`) |
